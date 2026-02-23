@@ -3,6 +3,7 @@
 import typer
 
 from nx import __version__
+from nx.config import FleetConfig, load_config
 
 app = typer.Typer(
     name="nx",
@@ -20,6 +21,7 @@ def version_callback(value: bool) -> None:
 
 @app.callback()
 def main(
+    ctx: typer.Context,
     version: bool = typer.Option(
         False,
         "--version",
@@ -30,3 +32,5 @@ def main(
     ),
 ) -> None:
     """nx — Distributed terminal orchestration."""
+    ctx.ensure_object(dict)
+    ctx.obj["config"] = load_config()

@@ -24,21 +24,27 @@ def mock_ssh():
 
 @pytest.fixture
 def tmp_config(tmp_path):
-    """Create a temporary fleet.toml config.
+    """Create a temporary fleet.toml and return a FleetConfig.
 
     Args:
         tmp_path: pytest built-in fixture for temp directory.
 
     Returns:
-        Path to temporary config directory.
+        tuple: (FleetConfig, Path) - the loaded config and path to the config file.
     """
     config_dir = tmp_path / "nexus"
     config_dir.mkdir()
     config_file = config_dir / "fleet.toml"
     config_file.write_text(
-        '[fleet]\nnodes = ["local"]\ndefault_node = "local"\ndefault_cmd = "/bin/bash"\n'
+        'nodes = ["local", "dev-server"]\n'
+        'default_node = "local"\n'
+        'default_cmd = "/bin/bash"\n'
+        'max_concurrent_ssh = 16\n'
+        'auto_reap_clean_exit = true\n'
     )
-    yield config_dir
+    from nx.config import load_config
+    config = load_config(config_file)
+    yield config, config_file
 
 
 @pytest.fixture
