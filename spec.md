@@ -165,8 +165,9 @@ Attaching to a remote `tmux` session from inside an existing `tmux` session crea
 
 **Scenario A: Executing from a bare terminal (No `$TMUX`)**
 
-* Execute standard attach: `ssh -t <node> "tmux -L nexus attach -t <session>"`
-* Use `os.execvp()` to replace the Python process with the SSH command for clean signal handling.
+* Use `os.execvp()` to replace the Python process for clean signal handling.
+* *If target is local:* `os.execvp("tmux", ["tmux", "-L", "nexus", "attach", "-t", "<session>"])`
+* *If target is remote:* `os.execvp("ssh", ["ssh", "-t", "<node>", "tmux", "-L", "nexus", "attach", "-t", "<session>"])`
 
 **Scenario B: Executing from inside `tmux -L nexus` (Already in a Nexus session)**
 

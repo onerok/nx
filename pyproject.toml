@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nx"
+version = "0.1.0"
+description = "Stateless CLI for distributed tmux session orchestration"
+requires-python = ">=3.12"
+dependencies = [
+    "typer>=0.9.0",
+    "pydantic>=2.0",
+    "rich>=13.0",
+]
+
+[project.scripts]
+nx = "nx.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nx"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"src/nx/data" = "nx/data"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+]
