@@ -4,7 +4,7 @@
 
 ## Progress Overview
 
-**Completed:** 9 / 14 milestones
+**Completed:** 10 / 14 milestones
 
 ## Current Sprint
 
@@ -19,7 +19,7 @@
 | 6 | `nx attach` — anti-nesting | M6 (§ Milestone 6) | `cli.py` attach cmd | `test_cli_attach.py` (6 tests) | **done** | 2026-02-23 |
 | 7 | `nx peek` & `nx logs` | M7 (§ Milestone 7) | `cli.py` peek/logs cmds | `test_cli_peek_logs.py` (6 tests) | **done** | 2026-02-23 |
 | 8 | `nx send` & `nx kill` | M8 (§ Milestone 8) | `cli.py` send/kill cmds | `test_cli_send_kill.py` (6 tests) | **done** | 2026-02-24 |
-| 9 | `nx gc` — garbage collection | M9 (§ Milestone 9) | `cli.py` gc cmd | `test_cli_gc.py` (6 tests) | pending | 2026-02-23 |
+| 9 | `nx gc` — garbage collection | M9 (§ Milestone 9) | `cli.py` gc cmd | `test_cli_gc.py` (6 tests) | **done** | 2026-02-24 |
 | 10 | Dashboard `nx dash` | M10 (§ Milestone 10) | `src/nx/dashboard.py` | `test_dashboard.py` (7 tests) | pending | 2026-02-23 |
 | 11 | Node management `nx nodes` | M11 (§ Milestone 11) | `src/nx/nodes.py` | `test_nodes.py` (8 tests) | pending | 2026-02-23 |
 | 12 | Snapshot & restore | M12 (§ Milestone 12) | `src/nx/snapshot.py` | `test_snapshot.py` (6 tests) | pending | 2026-02-23 |

@@ -404,6 +404,63 @@ def kill_session(
     console.print(f"Killed session {node}/{session}")
 
 
+@app.command("gc")
+def gc_sessions(
+    ctx: typer.Context,
+    name: Optional[str] = typer.Argument(None, help="Session name to reap (default: all exited sessions)."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="List exited sessions without killing them."),
+) -> None:
+    """Reap exited tmux sessions fleet-wide.
+
+    Discovers all sessions across the fleet and kills those that have exited.
+    Optionally filters by session name. Prompts for confirmation in interactive
+    terminals; auto-proceeds when piped.
+
+    Args:
+        ctx: Typer context carrying the loaded fleet config.
+        name: Optional session name to filter. If None, reaps all exited sessions.
+        dry_run: If True, list exited sessions without killing them.
+    """
+    config: FleetConfig = ctx.obj["config"]
+
+    # Fan out list command to all nodes.
+    results = asyncio.run(
+        fan_out(config.nodes, build_list_cmd(), max_concurrent=config.max_concurrent_ssh)
+    )
+
+    # Collect exited sessions as (node, session_name, exit_status) tuples.
+    exited: list[tuple[str, str, int | None]] = []
+    for node in config.nodes:
+        result = results[node]
+        if result.returncode != 0:
+            continue
+        sessions = parse_list_output(result.stdout)
+        for session in sessions:
+            if session.is_dead:
+                if name is None or session.name == name:
+                    exited.append((node, session.name, session.exit_status))
+
+    if not exited:
+        console.print("No exited sessions.")
+        return
+
+    # Dry-run: list what would be reaped and exit.
+    if dry_run:
+        parts = [f"{node}/{sname} [EXITED {status}]" for node, sname, status in exited]
+        console.print(f"Would reap: {', '.join(parts)}")
+        return
+
+    # Interactive confirmation.
+    if sys.stdin.isatty():
+        typer.confirm(f"Reap {len(exited)} exited session(s)?", abort=True)
+
+    # Kill each exited session.
+    for node, sname, _ in exited:
+        cmd = build_kill_cmd(sname)
+        asyncio.run(run_on_node(node, cmd))
+        console.print(f"Reaped {node}/{sname}")
+
+
 # Alias: nx a → nx attach
 app.command("a", hidden=True)(attach_session)
 
