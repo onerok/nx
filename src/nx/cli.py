@@ -3,6 +3,7 @@
 import asyncio
 import os
 import shutil
+import subprocess
 from typing import Optional
 
 import typer
@@ -12,6 +13,7 @@ from rich.table import Table
 from nx import __version__
 from nx.config import FleetConfig, load_config
 from nx.ssh import fan_out, run_on_node
+from nx.resolve import AmbiguousSession, SessionNotFound, resolve_session
 from nx.tmux import build_list_cmd, build_new_cmd, parse_list_output
 
 app = typer.Typer(
@@ -171,6 +173,86 @@ def new_session(
 
     console.print(f"Created session {node}/{name}")
 
+
+@app.command("attach")
+def attach_session(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="Session name (bare or node/session)."),
+) -> None:
+    """Attach to an existing tmux session on a fleet node.
+
+    Resolves the target session (by bare name or fully qualified node/session)
+    and attaches using the appropriate strategy based on whether the caller is
+    already inside a tmux session.
+
+    Scenario A — bare terminal: replaces the current process via execvp.
+    Scenario B — inside nexus tmux: uses switch-client (local) or opens a new
+        window with an SSH attach (remote).
+    Scenario C — inside user's personal tmux: opens a new window that nests
+        into the nexus session.
+
+    Args:
+        ctx: Typer context carrying the loaded fleet config.
+        name: Session name, either bare ("api") or fully qualified ("dev/api").
+    """
+    config: FleetConfig = ctx.obj["config"]
+
+    # Resolve the session name to a (node, session) tuple.
+    try:
+        node, session = asyncio.run(resolve_session(name, config))
+    except SessionNotFound as exc:
+        console.print(f"Error: {exc}")
+        raise typer.Exit(code=1)
+    except AmbiguousSession as exc:
+        console.print(f"Error: {exc}")
+        raise typer.Exit(code=1)
+
+    tmux_env = os.environ.get("TMUX", "")
+
+    if not tmux_env:
+        # Scenario A: Bare terminal — execvp replaces the current process.
+        if node == "local":
+            os.execvp("tmux", ["tmux", "-L", "nexus", "attach", "-t", session])
+        else:
+            os.execvp(
+                "ssh", ["ssh", "-t", node, "tmux", "-L", "nexus", "attach", "-t", session]
+            )
+    elif "nexus" in tmux_env:
+        # Scenario B: Inside nexus tmux — stay in the same tmux server.
+        if node == "local":
+            subprocess.run(
+                ["tmux", "-L", "nexus", "switch-client", "-t", session]
+            )
+        else:
+            subprocess.run(
+                [
+                    "tmux", "-L", "nexus", "new-window", "-n", session,
+                    "ssh", "-t", node, "tmux", "-L", "nexus", "attach", "-t", session,
+                ]
+            )
+        raise typer.Exit()
+    else:
+        # Scenario C: Inside user's personal tmux — open a new window
+        # that nests into the nexus session.
+        if node == "local":
+            subprocess.run(
+                [
+                    "tmux", "new-window", "-n", session,
+                    "tmux", "-L", "nexus", "attach", "-t", session,
+                ]
+            )
+        else:
+            subprocess.run(
+                [
+                    "tmux", "new-window", "-n", session,
+                    "ssh", "-t", node, "tmux", "-L", "nexus", "attach", "-t", session,
+                ]
+            )
+        raise typer.Exit()
+
+
+# Alias: nx a → nx attach
+app.command("a", hidden=True)(attach_session)
 
 # Alias: nx l → nx list
 app.command("l", hidden=True)(list_sessions)
