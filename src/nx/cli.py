@@ -15,7 +15,7 @@ from nx import __version__
 from nx.config import FleetConfig, load_config
 from nx.ssh import fan_out, run_on_node
 from nx.resolve import AmbiguousSession, SessionNotFound, resolve_session
-from nx.tmux import build_list_cmd, build_new_cmd, build_capture_cmd, parse_list_output
+from nx.tmux import build_list_cmd, build_new_cmd, build_capture_cmd, build_send_keys_cmd, build_kill_cmd, parse_list_output
 
 app = typer.Typer(
     name="nx",
@@ -328,6 +328,80 @@ def logs_session(
     cmd = build_capture_cmd(session, lines_value)
     result = asyncio.run(run_on_node(node, cmd))
     typer.echo(result.stdout, nl=False)
+
+
+@app.command("send")
+def send_keys(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="Session name (bare or node/session)."),
+    keys: list[str] = typer.Argument(..., help="Keys to send to the session."),
+    raw: bool = typer.Option(False, "--raw", help="Send keys verbatim without appending Enter."),
+) -> None:
+    """Send keystrokes to a tmux session.
+
+    By default, appends Enter after the last key. Use --raw to pass keys
+    verbatim to tmux send-keys (useful for control sequences like C-c).
+
+    Args:
+        ctx: Typer context carrying the loaded fleet config.
+        name: Session name, either bare ("api") or fully qualified ("dev/api").
+        keys: Keys to send to the session.
+        raw: If True, send keys verbatim without appending Enter.
+    """
+    config: FleetConfig = ctx.obj["config"]
+
+    try:
+        node, session = asyncio.run(resolve_session(name, config))
+    except SessionNotFound as exc:
+        console.print(f"Error: {exc}")
+        raise typer.Exit(code=1)
+    except AmbiguousSession as exc:
+        console.print(f"Error: {exc}")
+        raise typer.Exit(code=1)
+
+    cmd = build_send_keys_cmd(session, keys, raw=raw)
+    result = asyncio.run(run_on_node(node, cmd))
+
+    if result.returncode != 0:
+        console.print(f"Error: {result.stderr}")
+        raise typer.Exit(code=1)
+
+    console.print(f"Sent to {node}/{session}")
+
+
+@app.command("kill")
+def kill_session(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="Session name (bare or node/session)."),
+) -> None:
+    """Kill a tmux session.
+
+    Resolves the target session and sends a kill-session command to the
+    appropriate node.
+
+    Args:
+        ctx: Typer context carrying the loaded fleet config.
+        name: Session name, either bare ("api") or fully qualified ("dev/api").
+    """
+    config: FleetConfig = ctx.obj["config"]
+
+    try:
+        node, session = asyncio.run(resolve_session(name, config))
+    except SessionNotFound as exc:
+        console.print(f"Error: {exc}")
+        raise typer.Exit(code=1)
+    except AmbiguousSession as exc:
+        console.print(f"Error: {exc}")
+        raise typer.Exit(code=1)
+
+    cmd = build_kill_cmd(session)
+    result = asyncio.run(run_on_node(node, cmd))
+
+    if result.returncode != 0:
+        console.print(f"Error: {result.stderr}")
+        raise typer.Exit(code=1)
+
+    console.print(f"Killed session {node}/{session}")
 
 
 # Alias: nx a → nx attach
