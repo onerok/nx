@@ -1,6 +1,8 @@
 """Nexus CLI entry point."""
 
 import asyncio
+import os
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -8,8 +10,8 @@ from rich.table import Table
 
 from nx import __version__
 from nx.config import FleetConfig, load_config
-from nx.ssh import fan_out
-from nx.tmux import build_list_cmd, parse_list_output
+from nx.ssh import fan_out, run_on_node
+from nx.tmux import build_list_cmd, build_new_cmd, parse_list_output
 
 app = typer.Typer(
     name="nx",
@@ -107,6 +109,63 @@ def list_sessions(ctx: typer.Context) -> None:
         table.add_row(node, "", "", "", "[UNREACHABLE]")
 
     console.print(table)
+
+
+@app.command("new")
+def new_session(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="Session name."),
+    cmd: Optional[list[str]] = typer.Argument(None, help="Command to run in the session."),
+    on: Optional[str] = typer.Option(None, "--on", help="Target node."),
+    directory: Optional[str] = typer.Option(None, "--dir", "-d", help="Working directory."),
+) -> None:
+    """Create a new tmux session on a fleet node.
+
+    Creates a nexus-managed tmux session with the given name. The session
+    can target any node in the fleet and optionally run a specific command
+    in a chosen working directory.
+
+    Args:
+        ctx: Typer context carrying the loaded fleet config.
+        name: Name for the new tmux session.
+        cmd: Command to run inside the session. Defaults to the shell
+            configured in the fleet config.
+        on: Target node. Defaults to the fleet's default_node.
+        directory: Working directory for the session. For local nodes
+            defaults to the current directory; for remote nodes defaults
+            to the remote user's $HOME.
+    """
+    config: FleetConfig = ctx.obj["config"]
+
+    # Determine target node.
+    node = on or config.default_node
+
+    # Determine working directory.
+    # Reason: Local sessions should inherit the caller's cwd for convenience,
+    # while remote sessions default to $HOME (tmux's own default) since the
+    # local cwd is unlikely to exist on the remote host.
+    if directory is not None:
+        session_dir = directory
+    elif node == "local":
+        session_dir = os.getcwd()
+    else:
+        session_dir = None
+
+    # Determine command.
+    session_cmd = " ".join(cmd) if cmd else config.default_cmd
+
+    # Build and execute the tmux new-session command.
+    tmux_cmd = build_new_cmd(name, cmd=session_cmd, directory=session_dir)
+    result = asyncio.run(run_on_node(node, tmux_cmd))
+
+    if result.returncode != 0:
+        if "duplicate session" in (result.stderr or ""):
+            console.print(f"Error: Session '{name}' already exists on {node}.")
+        else:
+            console.print(f"Error: {result.stderr}")
+        raise typer.Exit(code=1)
+
+    console.print(f"Created session {node}/{name}")
 
 
 # Alias: nx l → nx list
