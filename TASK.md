@@ -4,7 +4,7 @@
 
 ## Progress Overview
 
-**Completed:** 2 / 14 milestones
+**Completed:** 4 / 14 milestones
 
 ## Current Sprint
 
@@ -12,8 +12,8 @@
 |---|-----------|-----------------|-----------|-------|--------|------|
 | 0 | Project skeleton & test harness | M0 (§ Milestone 0) | `pyproject.toml`, `src/nx/cli.py`, `tests/conftest.py` | `uv run nx --help` + `uv run pytest` clean | **done** | 2026-02-23 |
 | 1 | Config loading & validation | M1 (§ Milestone 1) | `src/nx/config.py` | `test_config.py` (5 tests) | **done** | 2026-02-23 |
-| 2 | SSH transport + tmux command builder | M2 (§ Milestone 2) | `src/nx/ssh.py`, `src/nx/tmux.py` | `test_transport.py` (13 tests) | pending | 2026-02-23 |
-| 3 | `nx list` — first end-to-end command | M3 (§ Milestone 3) | `cli.py` list cmd | `test_cli_list.py` (5 tests) | pending | 2026-02-23 |
+| 2 | SSH transport + tmux command builder | M2 (§ Milestone 2) | `src/nx/ssh.py`, `src/nx/tmux.py` | `test_transport.py` (13 tests) | **done** | 2026-02-23 |
+| 3 | `nx list` — first end-to-end command | M3 (§ Milestone 3) | `cli.py` list cmd | `test_cli_list.py` (5 tests) | **done** | 2026-02-23 |
 | 4 | `nx new` — session creation | M4 (§ Milestone 4) | `cli.py` new cmd | `test_cli_new.py` (7 tests) | pending | 2026-02-23 |
 | 5 | Resolution protocol | M5 (§ Milestone 5) | `src/nx/resolve.py` | `test_resolve.py` (7 tests) | pending | 2026-02-23 |
 | 6 | `nx attach` — anti-nesting | M6 (§ Milestone 6) | `cli.py` attach cmd | `test_cli_attach.py` (6 tests) | pending | 2026-02-23 |
