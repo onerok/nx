@@ -15,6 +15,7 @@ from nx import __version__
 from nx.config import FleetConfig, load_config
 from nx.ssh import fan_out, run_on_node
 from nx.resolve import AmbiguousSession, SessionNotFound, resolve_session
+from nx.nodes import nodes_ls, nodes_add, nodes_rm
 from nx.tmux import build_list_cmd, build_new_cmd, build_capture_cmd, build_send_keys_cmd, build_kill_cmd, parse_list_output
 
 app = typer.Typer(
@@ -459,6 +460,91 @@ def gc_sessions(
         cmd = build_kill_cmd(sname)
         asyncio.run(run_on_node(node, cmd))
         console.print(f"Reaped {node}/{sname}")
+
+
+# ---------------------------------------------------------------------------
+# nodes subcommand group
+# ---------------------------------------------------------------------------
+
+nodes_app = typer.Typer(name="nodes", help="Manage fleet nodes.", no_args_is_help=True)
+app.add_typer(nodes_app)
+
+
+@nodes_app.command("ls")
+def nodes_list(ctx: typer.Context) -> None:
+    """List fleet nodes with reachability and config status.
+
+    Shows each node's connectivity status, tmux version, and whether
+    the remote tmux.conf matches the canonical version.
+    """
+    config: FleetConfig = ctx.obj["config"]
+    statuses = asyncio.run(nodes_ls(config))
+
+    table = Table()
+    table.add_column("Node")
+    table.add_column("Status")
+    table.add_column("tmux.conf")
+
+    for status in statuses:
+        if not status.reachable:
+            table.add_row(status.node, "[UNREACHABLE]", "-")
+        else:
+            conn = "[OK]"
+            drift = "[DRIFT]" if status.config_drift else "[OK]"
+            table.add_row(status.node, conn, drift)
+
+    console.print(table)
+
+
+@nodes_app.command("add")
+def nodes_add_cmd(
+    ctx: typer.Context,
+    host: str = typer.Argument(..., help="Hostname to add to the fleet."),
+) -> None:
+    """Add a new node to the fleet.
+
+    Verifies remote tmux installation, pushes the canonical tmux.conf,
+    and configures SSH connection multiplexing.
+
+    Args:
+        ctx: Typer context carrying the loaded fleet config.
+        host: Hostname to add.
+    """
+    config: FleetConfig = ctx.obj["config"]
+
+    try:
+        messages = asyncio.run(nodes_add(host, config))
+    except RuntimeError as exc:
+        console.print(f"Error: {exc}")
+        raise typer.Exit(code=1)
+
+    for msg in messages:
+        console.print(msg)
+
+
+@nodes_app.command("rm")
+def nodes_rm_cmd(
+    ctx: typer.Context,
+    host: str = typer.Argument(..., help="Hostname to remove from the fleet."),
+) -> None:
+    """Remove a node from the fleet.
+
+    Removes the node's SSH config block from the nexus SSH config file.
+
+    Args:
+        ctx: Typer context carrying the loaded fleet config.
+        host: Hostname to remove.
+    """
+    config: FleetConfig = ctx.obj["config"]
+
+    try:
+        messages = nodes_rm(host)
+    except ValueError as exc:
+        console.print(f"Error: {exc}")
+        raise typer.Exit(code=1)
+
+    for msg in messages:
+        console.print(msg)
 
 
 # Alias: nx a → nx attach
