@@ -4,6 +4,7 @@ import asyncio
 import os
 import shutil
 import subprocess
+import sys
 from typing import Optional
 
 import typer
@@ -14,7 +15,7 @@ from nx import __version__
 from nx.config import FleetConfig, load_config
 from nx.ssh import fan_out, run_on_node
 from nx.resolve import AmbiguousSession, SessionNotFound, resolve_session
-from nx.tmux import build_list_cmd, build_new_cmd, parse_list_output
+from nx.tmux import build_list_cmd, build_new_cmd, build_capture_cmd, parse_list_output
 
 app = typer.Typer(
     name="nx",
@@ -249,6 +250,84 @@ def attach_session(
                 ]
             )
         raise typer.Exit()
+
+
+@app.command("peek")
+def peek_session(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="Session name (bare or node/session)."),
+) -> None:
+    """Show the last 30 lines of a tmux session's pane output.
+
+    Resolves the target session and captures the most recent 30 lines from its
+    active pane, printing them to stdout. Useful for a quick glance at what a
+    session is doing without attaching.
+
+    Args:
+        ctx: Typer context carrying the loaded fleet config.
+        name: Session name, either bare ("api") or fully qualified ("dev/api").
+    """
+    config: FleetConfig = ctx.obj["config"]
+
+    try:
+        node, session = asyncio.run(resolve_session(name, config))
+    except SessionNotFound as exc:
+        console.print(f"Error: {exc}")
+        raise typer.Exit(code=1)
+    except AmbiguousSession as exc:
+        console.print(f"Error: {exc}")
+        raise typer.Exit(code=1)
+
+    cmd = build_capture_cmd(session, 30)
+    result = asyncio.run(run_on_node(node, cmd))
+    typer.echo(result.stdout, nl=False)
+
+
+@app.command("logs")
+def logs_session(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="Session name (bare or node/session)."),
+    lines: Optional[int] = typer.Option(
+        None, "--lines", "-n", help="Number of lines (default: 100 interactive, full scrollback when piped)."
+    ),
+) -> None:
+    """Capture pane output from a tmux session.
+
+    Resolves the target session and captures scrollback from its active pane.
+    When invoked interactively the default is 100 lines; when piped the full
+    scrollback history is returned. Use --lines/-n to override explicitly.
+
+    Args:
+        ctx: Typer context carrying the loaded fleet config.
+        name: Session name, either bare ("api") or fully qualified ("dev/api").
+        lines: Number of scrollback lines to capture. Defaults to 100 in a
+            terminal, or the full scrollback buffer when output is piped.
+    """
+    config: FleetConfig = ctx.obj["config"]
+
+    try:
+        node, session = asyncio.run(resolve_session(name, config))
+    except SessionNotFound as exc:
+        console.print(f"Error: {exc}")
+        raise typer.Exit(code=1)
+    except AmbiguousSession as exc:
+        console.print(f"Error: {exc}")
+        raise typer.Exit(code=1)
+
+    # Reason: When the user explicitly passes --lines we honour it. Otherwise
+    # we pick a sensible default: 100 lines for interactive terminals, or the
+    # entire scrollback buffer ("-") when output is piped so that downstream
+    # tools (grep, less, etc.) receive everything.
+    if lines is not None:
+        lines_value: int | str = lines
+    elif sys.stdout.isatty():
+        lines_value = 100
+    else:
+        lines_value = "-"
+
+    cmd = build_capture_cmd(session, lines_value)
+    result = asyncio.run(run_on_node(node, cmd))
+    typer.echo(result.stdout, nl=False)
 
 
 # Alias: nx a → nx attach
