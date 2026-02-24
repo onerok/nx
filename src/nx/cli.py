@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import shutil
 from typing import Optional
 
 import typer
@@ -44,6 +45,9 @@ def main(
     """nx — Distributed terminal orchestration."""
     ctx.ensure_object(dict)
     ctx.obj["config"] = load_config()
+    if not shutil.which("fzf"):
+        typer.echo("Error: fzf is required but not found on $PATH.", err=True)
+        raise typer.Exit(code=1)
 
 
 @app.command("list")
