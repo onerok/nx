@@ -17,6 +17,8 @@ from nx.ssh import fan_out, run_on_node
 from nx.resolve import AmbiguousSession, SessionNotFound, resolve_session
 from nx.nodes import nodes_ls, nodes_add, nodes_rm
 from nx.tmux import build_list_cmd, build_new_cmd, build_capture_cmd, build_send_keys_cmd, build_kill_cmd, parse_list_output
+from nx.snapshot import save_snapshot, restore_snapshot
+from nx.dashboard import build_dashboard
 
 app = typer.Typer(
     name="nx",
@@ -460,6 +462,63 @@ def gc_sessions(
         cmd = build_kill_cmd(sname)
         asyncio.run(run_on_node(node, cmd))
         console.print(f"Reaped {node}/{sname}")
+
+
+@app.command("snapshot")
+def snapshot_cmd(ctx: typer.Context) -> None:
+    """Save fleet state to a JSON snapshot file.
+
+    Captures all active sessions across the fleet and writes them to
+    ~/.config/nexus/snapshot.json.
+    """
+    config: FleetConfig = ctx.obj["config"]
+    path = asyncio.run(save_snapshot(config))
+    # Reason: Count sessions from the snapshot file we just wrote to report accurately.
+    import json
+    data = json.loads(path.read_text())
+    count = len(data.get("sessions", []))
+    console.print(f"Saved {count} sessions to {path}")
+
+
+@app.command("restore")
+def restore_cmd(
+    ctx: typer.Context,
+    node: Optional[str] = typer.Option(None, "--node", help="Only restore sessions on this node."),
+) -> None:
+    """Restore fleet state from a JSON snapshot file.
+
+    Reads ~/.config/nexus/snapshot.json and creates sessions for each
+    entry. Use --node to filter to a specific node.
+    """
+    config: FleetConfig = ctx.obj["config"]
+    messages = asyncio.run(restore_snapshot(config, node_filter=node))
+
+    if not messages:
+        console.print("No sessions to restore.")
+        return
+
+    for msg in messages:
+        console.print(msg)
+
+    console.print(f"Restored {len(messages)} sessions")
+
+
+@app.command("dash")
+def dashboard_cmd(ctx: typer.Context) -> None:
+    """Open a CCTV-style read-only dashboard of all fleet sessions.
+
+    Creates a temporary tmux session with split panes showing each active
+    session in read-only mode. Press Enter to tear down the dashboard and
+    attach to the selected session.
+    """
+    config: FleetConfig = ctx.obj["config"]
+    exec_args = asyncio.run(build_dashboard(config))
+
+    if not exec_args:
+        console.print("No active sessions to display.")
+        return
+
+    os.execvp(exec_args[0], exec_args)
 
 
 # ---------------------------------------------------------------------------
