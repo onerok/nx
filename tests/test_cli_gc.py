@@ -37,9 +37,7 @@ class FakeProcess:
         returncode: Exit code to return.
     """
 
-    def __init__(
-        self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0
-    ):
+    def __init__(self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0):
         self.stdout = stdout
         self.stderr = stderr
         self.returncode = returncode
@@ -197,8 +195,7 @@ def test_gc_by_name(monkeypatch):
     calls: list[tuple] = []
     node_outputs = {
         "local": (
-            b"old-api|1|0|/home/u|bash|1234|1|0\n"
-            b"crashed|1|0|/app|python|5678|1|1\n"
+            b"old-api|1|0|/home/u|bash|1234|1|0\ncrashed|1|0|/app|python|5678|1|1\n"
         ),
     }
     monkeypatch.setattr(

@@ -5,7 +5,6 @@ import glob as globmod
 import hashlib
 import importlib.resources
 import re
-import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -81,7 +80,9 @@ def _parse_ssh_config_file(path: Path, hosts: set[str]) -> None:
                 _parse_ssh_config_file(Path(match), hosts)
 
 
-def discover_hosts(config: FleetConfig, ssh_config_path: Path | None = None) -> list[str]:
+def discover_hosts(
+    config: FleetConfig, ssh_config_path: Path | None = None
+) -> list[str]:
     """Discover SSH hosts not yet in the fleet.
 
     Parses ~/.ssh/config for all Host entries, then subtracts hosts already
@@ -148,24 +149,32 @@ async def _check_node(node: str, local_hash: str) -> NodeStatus:
             drift = remote_hash != local_hash
         else:
             drift = False
-        return NodeStatus(node="local", reachable=True, tmux_version=version, config_drift=drift)
+        return NodeStatus(
+            node="local", reachable=True, tmux_version=version, config_drift=drift
+        )
 
     # Remote node: check reachability + tmux version.
     result = await run_on_node(node, ["tmux", "-V"])
     if result.returncode != 0:
-        return NodeStatus(node=node, reachable=False, tmux_version=None, config_drift=False)
+        return NodeStatus(
+            node=node, reachable=False, tmux_version=None, config_drift=False
+        )
 
     version = result.stdout.strip()
 
     # Check remote tmux.conf hash.
-    hash_result = await run_on_node(node, ["md5sum", str(Path("~/.config/nexus/tmux.conf"))])
+    hash_result = await run_on_node(
+        node, ["md5sum", str(Path("~/.config/nexus/tmux.conf"))]
+    )
     if hash_result.returncode == 0:
         remote_hash = hash_result.stdout.split()[0]
         drift = remote_hash != local_hash
     else:
         drift = False
 
-    return NodeStatus(node=node, reachable=True, tmux_version=version, config_drift=drift)
+    return NodeStatus(
+        node=node, reachable=True, tmux_version=version, config_drift=drift
+    )
 
 
 async def nodes_ls(config: FleetConfig) -> list[NodeStatus]:
@@ -238,7 +247,11 @@ async def nodes_add(
     await run_on_node(host, ["mkdir", "-p", "~/.config/nexus"])
     await run_on_node(
         host,
-        ["bash", "-c", f"mkdir -p ~/.config/nexus && cat > ~/.config/nexus/tmux.conf << 'NXEOF'\n{content}\nNXEOF"],
+        [
+            "bash",
+            "-c",
+            f"mkdir -p ~/.config/nexus && cat > ~/.config/nexus/tmux.conf << 'NXEOF'\n{content}\nNXEOF",
+        ],
     )
     log.append(f"Pushed tmux.conf to {host}")
 

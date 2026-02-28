@@ -10,7 +10,7 @@ import asyncio
 
 import pytest
 
-from nx.ssh import NodeResult, fan_out, run_on_node
+from nx.ssh import fan_out, run_on_node
 from nx.tmux import (
     FORMAT_STRING,
     SessionInfo,
@@ -37,9 +37,7 @@ class FakeProcess:
         returncode: Exit code to return.
     """
 
-    def __init__(
-        self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0
-    ):
+    def __init__(self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0):
         self.stdout = stdout
         self.stderr = stderr
         self.returncode = returncode
@@ -234,14 +232,29 @@ def test_build_new_cmd():
     # With command and directory
     result = build_new_cmd("api", "python serve.py", "/app")
     assert result == [
-        "tmux", "-L", "nexus", "new-session", "-d", "-s", "api",
-        "-c", "/app", "python", "serve.py",
+        "tmux",
+        "-L",
+        "nexus",
+        "new-session",
+        "-d",
+        "-s",
+        "api",
+        "-c",
+        "/app",
+        "python",
+        "serve.py",
     ]
 
     # Without command or directory — minimal form
     result_minimal = build_new_cmd("api")
     assert result_minimal == [
-        "tmux", "-L", "nexus", "new-session", "-d", "-s", "api",
+        "tmux",
+        "-L",
+        "nexus",
+        "new-session",
+        "-d",
+        "-s",
+        "api",
     ]
 
 
@@ -250,13 +263,29 @@ def test_build_capture_cmd():
     # Numeric lines — -S -30
     result = build_capture_cmd("api", 30)
     assert result == [
-        "tmux", "-L", "nexus", "capture-pane", "-p", "-t", "api", "-S", "-30",
+        "tmux",
+        "-L",
+        "nexus",
+        "capture-pane",
+        "-p",
+        "-t",
+        "api",
+        "-S",
+        "-30",
     ]
 
     # Full scrollback — -S -
     result_full = build_capture_cmd("api", "-")
     assert result_full == [
-        "tmux", "-L", "nexus", "capture-pane", "-p", "-t", "api", "-S", "-",
+        "tmux",
+        "-L",
+        "nexus",
+        "capture-pane",
+        "-p",
+        "-t",
+        "api",
+        "-S",
+        "-",
     ]
 
 
@@ -265,13 +294,26 @@ def test_build_send_keys_cmd():
     # Default mode — Enter appended
     result = build_send_keys_cmd("api", ["hello"])
     assert result == [
-        "tmux", "-L", "nexus", "send-keys", "-t", "api", "hello", "Enter",
+        "tmux",
+        "-L",
+        "nexus",
+        "send-keys",
+        "-t",
+        "api",
+        "hello",
+        "Enter",
     ]
 
     # Raw mode — no Enter appended
     result_raw = build_send_keys_cmd("api", ["C-c"], raw=True)
     assert result_raw == [
-        "tmux", "-L", "nexus", "send-keys", "-t", "api", "C-c",
+        "tmux",
+        "-L",
+        "nexus",
+        "send-keys",
+        "-t",
+        "api",
+        "C-c",
     ]
 
 
@@ -279,5 +321,10 @@ def test_build_kill_cmd():
     """build_kill_cmd builds correct kill-session command."""
     result = build_kill_cmd("api")
     assert result == [
-        "tmux", "-L", "nexus", "kill-session", "-t", "api",
+        "tmux",
+        "-L",
+        "nexus",
+        "kill-session",
+        "-t",
+        "api",
     ]

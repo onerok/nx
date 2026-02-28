@@ -15,7 +15,6 @@ import asyncio
 import os
 import subprocess
 
-import pytest
 from typer.testing import CliRunner
 
 from nx.cli import app
@@ -38,9 +37,7 @@ class FakeProcess:
         returncode: Exit code to return.
     """
 
-    def __init__(
-        self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0
-    ):
+    def __init__(self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0):
         self.stdout = stdout
         self.stderr = stderr
         self.returncode = returncode
@@ -89,15 +86,11 @@ def test_new_local_default(monkeypatch):
         - Exec args contain: -c <cwd> (local default dir)
         - Exec args contain: /bin/bash (from default_cmd)
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     calls: list[tuple] = []
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_exec", _make_fake_exec(calls)
-    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _make_fake_exec(calls))
 
     result = runner.invoke(app, ["new", "-D", "api"])
 
@@ -145,9 +138,7 @@ def test_new_remote(monkeypatch):
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     calls: list[tuple] = []
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_exec", _make_fake_exec(calls)
-    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _make_fake_exec(calls))
 
     result = runner.invoke(app, ["new", "-D", "--on", "dev-server", "api"])
 
@@ -178,15 +169,11 @@ def test_new_with_dir(monkeypatch):
     Expected:
         - Exec call args contain "-c" and "/tmp".
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     calls: list[tuple] = []
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_exec", _make_fake_exec(calls)
-    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _make_fake_exec(calls))
 
     result = runner.invoke(app, ["new", "-D", "--dir", "/tmp", "api"])
 
@@ -211,16 +198,12 @@ def test_new_default_dir_local(monkeypatch):
     Expected:
         - Exec call args contain "-c" and "/home/test/projects".
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
     monkeypatch.setattr(os, "getcwd", lambda: "/home/test/projects")
 
     calls: list[tuple] = []
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_exec", _make_fake_exec(calls)
-    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _make_fake_exec(calls))
 
     result = runner.invoke(app, ["new", "-D", "api"])
 
@@ -254,9 +237,7 @@ def test_new_default_dir_remote(monkeypatch):
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     calls: list[tuple] = []
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_exec", _make_fake_exec(calls)
-    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _make_fake_exec(calls))
 
     result = runner.invoke(app, ["new", "-D", "--on", "dev-server", "api"])
 
@@ -288,9 +269,7 @@ def test_new_default_cmd(monkeypatch):
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     calls: list[tuple] = []
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_exec", _make_fake_exec(calls)
-    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _make_fake_exec(calls))
 
     result = runner.invoke(app, ["new", "-D", "api"])
 
@@ -315,15 +294,11 @@ def test_new_duplicate_name(monkeypatch):
         - exit_code == 1
         - Output contains "Error: Session 'api' already exists on local."
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     calls: list[tuple] = []
-    error_proc = FakeProcess(
-        stderr=b"duplicate session: api", returncode=1
-    )
+    error_proc = FakeProcess(stderr=b"duplicate session: api", returncode=1)
     monkeypatch.setattr(
         asyncio, "create_subprocess_exec", _make_fake_exec(calls, error_proc)
     )
@@ -349,16 +324,12 @@ def test_new_auto_name(monkeypatch):
         - Output contains "Created session local/brave-penguin"
         - Exec args contain "brave-penguin" as the session name
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
     monkeypatch.setattr("nx.cli.generate_slug", lambda n: "brave-penguin")
 
     calls: list[tuple] = []
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_exec", _make_fake_exec(calls)
-    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _make_fake_exec(calls))
 
     result = runner.invoke(app, ["new", "-D"])
 
@@ -408,9 +379,7 @@ def test_new_fzf_node_picker(monkeypatch):
 
     # Mock create_subprocess_exec for the tmux call.
     exec_calls: list[tuple] = []
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_exec", _make_fake_exec(exec_calls)
-    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _make_fake_exec(exec_calls))
 
     result = runner.invoke(app, ["new", "-D", "api"])
 
@@ -468,9 +437,7 @@ def test_new_on_flag_triggers_picker(monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
 
     exec_calls: list[tuple] = []
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_exec", _make_fake_exec(exec_calls)
-    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _make_fake_exec(exec_calls))
 
     result = runner.invoke(app, ["new", "-D", "--on"])
 
@@ -488,9 +455,7 @@ def test_new_single_node_no_fzf(monkeypatch):
     Expected:
         - No fzf call; session created on "local".
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     fzf_called = False
@@ -506,9 +471,7 @@ def test_new_single_node_no_fzf(monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
 
     exec_calls: list[tuple] = []
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_exec", _make_fake_exec(exec_calls)
-    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _make_fake_exec(exec_calls))
 
     result = runner.invoke(app, ["new", "-D", "api"])
 
@@ -548,9 +511,7 @@ def test_new_multi_node_not_tty_uses_default(monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
 
     exec_calls: list[tuple] = []
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_exec", _make_fake_exec(exec_calls)
-    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _make_fake_exec(exec_calls))
 
     result = runner.invoke(app, ["new", "-D", "api"])
 
@@ -570,16 +531,12 @@ def test_new_auto_attach(monkeypatch):
         - Session is created successfully
         - os.execvp is called with tmux attach args
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
     monkeypatch.delenv("TMUX", raising=False)
 
     calls: list[tuple] = []
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_exec", _make_fake_exec(calls)
-    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _make_fake_exec(calls))
 
     # Track execvp calls instead of letting it replace the process.
     execvp_calls: list[tuple] = []
@@ -615,15 +572,11 @@ def test_new_detach_skips_attach(monkeypatch):
     Expected:
         - Session is created but os.execvp is NOT called.
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     calls: list[tuple] = []
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_exec", _make_fake_exec(calls)
-    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _make_fake_exec(calls))
 
     execvp_calls: list[tuple] = []
     monkeypatch.setattr(os, "execvp", lambda f, a: execvp_calls.append((f, a)))

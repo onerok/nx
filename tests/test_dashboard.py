@@ -16,7 +16,6 @@ Enter key tears down the dashboard and attaches to the selected session.
 import asyncio
 import os
 
-import pytest
 from typer.testing import CliRunner
 
 from nx.cli import app
@@ -40,9 +39,7 @@ class FakeProcess:
         returncode: Exit code to return.
     """
 
-    def __init__(
-        self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0
-    ):
+    def __init__(self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0):
         self.stdout = stdout
         self.stderr = stderr
         self.returncode = returncode
@@ -95,9 +92,7 @@ def test_dash_creates_temporary_session(monkeypatch):
           nx_dash socket.
         - build_dashboard returns the execvp args for attaching.
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
 
     tmux_output = b"api|1|0|/home/u|bash|1234|0|\n"
     fake_exec, calls = make_subprocess_factory(tmux_output)
@@ -110,8 +105,7 @@ def test_dash_creates_temporary_session(monkeypatch):
 
     # Verify that a new-session call was made on the nx_dash socket.
     new_session_calls = [
-        c for c in calls
-        if "new-session" in c and "-s" in c and "dashboard" in c
+        c for c in calls if "new-session" in c and "-s" in c and "dashboard" in c
     ]
     assert len(new_session_calls) >= 1, (
         f"Expected a new-session call for dashboard, got calls: {calls}"
@@ -132,14 +126,9 @@ def test_dash_pane_metadata(monkeypatch):
         - Subprocess calls include `set-option -p` with `@nx_target local/api`
           and `@nx_target local/worker`.
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
 
-    tmux_output = (
-        b"api|1|0|/home/u|bash|1234|0|\n"
-        b"worker|1|0|/home/u|celery|5678|0|\n"
-    )
+    tmux_output = b"api|1|0|/home/u|bash|1234|0|\nworker|1|0|/home/u|celery|5678|0|\n"
     fake_exec, calls = make_subprocess_factory(tmux_output)
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
@@ -171,9 +160,7 @@ def test_dash_stores_nx_bin(monkeypatch):
     Expected:
         - Subprocess calls include `set-environment NX_BIN /usr/local/bin/nx`.
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
 
     tmux_output = b"api|1|0|/home/u|bash|1234|0|\n"
     fake_exec, calls = make_subprocess_factory(tmux_output)
@@ -183,9 +170,7 @@ def test_dash_stores_nx_bin(monkeypatch):
     asyncio.run(build_dashboard(config))
 
     # Find the set-environment call.
-    set_env_calls = [
-        c for c in calls if "set-environment" in c and "NX_BIN" in c
-    ]
+    set_env_calls = [c for c in calls if "set-environment" in c and "NX_BIN" in c]
     assert len(set_env_calls) == 1
 
     call = set_env_calls[0]
@@ -205,9 +190,7 @@ def test_dash_enter_binding(monkeypatch):
         - The shim contains: show-environment, display-message, detach-client,
           kill-session, and exec.
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
 
     tmux_output = b"api|1|0|/home/u|bash|1234|0|\n"
     fake_exec, calls = make_subprocess_factory(tmux_output)
@@ -246,14 +229,9 @@ def test_dash_read_only(monkeypatch):
         - The new-session command includes -r for the initial pane.
         - The split-window command also includes -r for additional panes.
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
 
-    tmux_output = (
-        b"api|1|0|/home/u|bash|1234|0|\n"
-        b"worker|1|0|/home/u|celery|5678|0|\n"
-    )
+    tmux_output = b"api|1|0|/home/u|bash|1234|0|\nworker|1|0|/home/u|celery|5678|0|\n"
     fake_exec, calls = make_subprocess_factory(tmux_output)
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
@@ -283,9 +261,7 @@ def test_dash_empty_fleet(monkeypatch):
         - Output contains "No active sessions to display".
         - os.execvp is NOT called.
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     async def fake_exec(*args, **kwargs):
@@ -321,9 +297,7 @@ def test_dash_uses_execvp(monkeypatch):
         - os.execvp is called with ("tmux", ["tmux", "-L", "nx_dash",
           "attach", "-t", "dashboard"]).
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     # Monkeypatch build_dashboard to return known args without subprocess calls.

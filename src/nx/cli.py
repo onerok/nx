@@ -17,7 +17,14 @@ from nx.config import FleetConfig, load_config
 from nx.ssh import fan_out, run_on_node
 from nx.resolve import AmbiguousSession, SessionNotFound, resolve_session
 from nx.nodes import nodes_ls, nodes_add, nodes_rm, discover_hosts
-from nx.tmux import build_list_cmd, build_new_cmd, build_capture_cmd, build_send_keys_cmd, build_kill_cmd, parse_list_output
+from nx.tmux import (
+    build_list_cmd,
+    build_new_cmd,
+    build_capture_cmd,
+    build_send_keys_cmd,
+    build_kill_cmd,
+    parse_list_output,
+)
 from nx.snapshot import save_snapshot, restore_snapshot
 from nx.dashboard import build_dashboard
 
@@ -53,6 +60,7 @@ def _stdin_is_tty() -> bool:
         bool: True if stdin is a tty.
     """
     return sys.stdin.isatty()
+
 
 app = typer.Typer(
     name="nx",
@@ -102,7 +110,9 @@ def list_sessions(ctx: typer.Context) -> None:
 
     # Fan out the list command to all nodes concurrently.
     results = asyncio.run(
-        fan_out(config.nodes, build_list_cmd(), max_concurrent=config.max_concurrent_ssh)
+        fan_out(
+            config.nodes, build_list_cmd(), max_concurrent=config.max_concurrent_ssh
+        )
     )
 
     # Classify nodes into reachable (with parsed sessions) and unreachable.
@@ -164,11 +174,23 @@ def list_sessions(ctx: typer.Context) -> None:
 @app.command("new", cls=_OptionalOnCommand)
 def new_session(
     ctx: typer.Context,
-    name: Optional[str] = typer.Argument(None, help="Session name (auto-generated if omitted)."),
-    cmd: Optional[list[str]] = typer.Argument(None, help="Command to run in the session."),
-    on: Optional[str] = typer.Option(None, "--on", help="Target node. Use --on without a value to pick interactively."),
-    directory: Optional[str] = typer.Option(None, "--dir", "-d", help="Working directory."),
-    detach: bool = typer.Option(False, "--detach", "-D", help="Create session without attaching."),
+    name: Optional[str] = typer.Argument(
+        None, help="Session name (auto-generated if omitted)."
+    ),
+    cmd: Optional[list[str]] = typer.Argument(
+        None, help="Command to run in the session."
+    ),
+    on: Optional[str] = typer.Option(
+        None,
+        "--on",
+        help="Target node. Use --on without a value to pick interactively.",
+    ),
+    directory: Optional[str] = typer.Option(
+        None, "--dir", "-d", help="Working directory."
+    ),
+    detach: bool = typer.Option(
+        False, "--detach", "-D", help="Create session without attaching."
+    ),
 ) -> None:
     """Create a new tmux session on a fleet node.
 
@@ -203,9 +225,7 @@ def new_session(
         node = config.nodes[0]
     elif pick_node or _stdin_is_tty():
         # Reason: Put default_node first so it's pre-highlighted in fzf.
-        sorted_nodes = sorted(
-            config.nodes, key=lambda n: (n != config.default_node, n)
-        )
+        sorted_nodes = sorted(config.nodes, key=lambda n: (n != config.default_node, n))
         result = subprocess.run(
             ["fzf", "--prompt", "Select node: "],
             input="\n".join(sorted_nodes),
@@ -250,6 +270,60 @@ def new_session(
         _attach_to_session(node, name)
 
 
+def _pick_session(config: FleetConfig) -> tuple[str, str]:
+    """Launch an fzf picker listing all sessions across the fleet.
+
+    Fans out to all nodes, collects sessions as "node/session" strings,
+    sorts with the default node first, and lets the user pick via fzf.
+
+    Args:
+        config: Fleet configuration with node list and settings.
+
+    Returns:
+        tuple[str, str]: The selected (node, session_name) tuple.
+
+    Raises:
+        typer.Exit: If no sessions exist or the user cancels the picker.
+    """
+    results = asyncio.run(
+        fan_out(
+            config.nodes, build_list_cmd(), max_concurrent=config.max_concurrent_ssh
+        )
+    )
+
+    entries: list[str] = []
+    for node in config.nodes:
+        result = results[node]
+        if result.returncode != 0:
+            continue
+        for session in parse_list_output(result.stdout):
+            entries.append(f"{node}/{session.name}")
+
+    if not entries:
+        console.print("No active sessions.")
+        raise typer.Exit(code=1)
+
+    # Reason: Sort default_node sessions first for quick selection.
+    sorted_entries = sorted(
+        entries,
+        key=lambda e: (0 if e.split("/", 1)[0] == config.default_node else 1, e),
+    )
+
+    result = subprocess.run(
+        ["fzf", "--prompt", "Attach to session: "],
+        input="\n".join(sorted_entries),
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        console.print("Selection cancelled.")
+        raise typer.Exit(code=1)
+
+    selected = result.stdout.strip()
+    node, session = selected.split("/", 1)
+    return (node, session)
+
+
 def _attach_to_session(node: str, session: str) -> None:
     """Attach to a tmux session on the given node.
 
@@ -271,19 +345,31 @@ def _attach_to_session(node: str, session: str) -> None:
             os.execvp("tmux", ["tmux", "-L", "nexus", "attach", "-t", session])
         else:
             os.execvp(
-                "ssh", ["ssh", "-t", node, "tmux", "-L", "nexus", "attach", "-t", session]
+                "ssh",
+                ["ssh", "-t", node, "tmux", "-L", "nexus", "attach", "-t", session],
             )
     elif "nexus" in tmux_env:
         # Scenario B: Inside nexus tmux — stay in the same tmux server.
         if node == "local":
-            subprocess.run(
-                ["tmux", "-L", "nexus", "switch-client", "-t", session]
-            )
+            subprocess.run(["tmux", "-L", "nexus", "switch-client", "-t", session])
         else:
             subprocess.run(
                 [
-                    "tmux", "-L", "nexus", "new-window", "-n", session,
-                    "ssh", "-t", node, "tmux", "-L", "nexus", "attach", "-t", session,
+                    "tmux",
+                    "-L",
+                    "nexus",
+                    "new-window",
+                    "-n",
+                    session,
+                    "ssh",
+                    "-t",
+                    node,
+                    "tmux",
+                    "-L",
+                    "nexus",
+                    "attach",
+                    "-t",
+                    session,
                 ]
             )
         raise typer.Exit()
@@ -293,15 +379,34 @@ def _attach_to_session(node: str, session: str) -> None:
         if node == "local":
             subprocess.run(
                 [
-                    "tmux", "new-window", "-n", session,
-                    "tmux", "-L", "nexus", "attach", "-t", session,
+                    "tmux",
+                    "new-window",
+                    "-n",
+                    session,
+                    "tmux",
+                    "-L",
+                    "nexus",
+                    "attach",
+                    "-t",
+                    session,
                 ]
             )
         else:
             subprocess.run(
                 [
-                    "tmux", "new-window", "-n", session,
-                    "ssh", "-t", node, "tmux", "-L", "nexus", "attach", "-t", session,
+                    "tmux",
+                    "new-window",
+                    "-n",
+                    session,
+                    "ssh",
+                    "-t",
+                    node,
+                    "tmux",
+                    "-L",
+                    "nexus",
+                    "attach",
+                    "-t",
+                    session,
                 ]
             )
         raise typer.Exit()
@@ -310,29 +415,35 @@ def _attach_to_session(node: str, session: str) -> None:
 @app.command("attach")
 def attach_session(
     ctx: typer.Context,
-    name: str = typer.Argument(..., help="Session name (bare or node/session)."),
+    name: str = typer.Argument(
+        None, help="Session name (bare or node/session). Omit for picker."
+    ),
 ) -> None:
     """Attach to an existing tmux session on a fleet node.
 
     Resolves the target session (by bare name or fully qualified node/session)
     and attaches using the appropriate strategy based on whether the caller is
-    already inside a tmux session.
+    already inside a tmux session. When called without arguments, launches an
+    fzf picker with all sessions across the fleet.
 
     Args:
         ctx: Typer context carrying the loaded fleet config.
         name: Session name, either bare ("api") or fully qualified ("dev/api").
+            If omitted, an interactive picker is shown.
     """
     config: FleetConfig = ctx.obj["config"]
 
-    # Resolve the session name to a (node, session) tuple.
-    try:
-        node, session = asyncio.run(resolve_session(name, config))
-    except SessionNotFound as exc:
-        console.print(f"Error: {exc}")
-        raise typer.Exit(code=1)
-    except AmbiguousSession as exc:
-        console.print(f"Error: {exc}")
-        raise typer.Exit(code=1)
+    if name is None:
+        node, session = _pick_session(config)
+    else:
+        try:
+            node, session = asyncio.run(resolve_session(name, config))
+        except SessionNotFound as exc:
+            console.print(f"Error: {exc}")
+            raise typer.Exit(code=1)
+        except AmbiguousSession as exc:
+            console.print(f"Error: {exc}")
+            raise typer.Exit(code=1)
 
     _attach_to_session(node, session)
 
@@ -373,7 +484,10 @@ def logs_session(
     ctx: typer.Context,
     name: str = typer.Argument(..., help="Session name (bare or node/session)."),
     lines: Optional[int] = typer.Option(
-        None, "--lines", "-n", help="Number of lines (default: 100 interactive, full scrollback when piped)."
+        None,
+        "--lines",
+        "-n",
+        help="Number of lines (default: 100 interactive, full scrollback when piped).",
     ),
 ) -> None:
     """Capture pane output from a tmux session.
@@ -420,7 +534,9 @@ def send_keys(
     ctx: typer.Context,
     name: str = typer.Argument(..., help="Session name (bare or node/session)."),
     keys: list[str] = typer.Argument(..., help="Keys to send to the session."),
-    raw: bool = typer.Option(False, "--raw", help="Send keys verbatim without appending Enter."),
+    raw: bool = typer.Option(
+        False, "--raw", help="Send keys verbatim without appending Enter."
+    ),
 ) -> None:
     """Send keystrokes to a tmux session.
 
@@ -492,8 +608,12 @@ def kill_session(
 @app.command("gc")
 def gc_sessions(
     ctx: typer.Context,
-    name: Optional[str] = typer.Argument(None, help="Session name to reap (default: all exited sessions)."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="List exited sessions without killing them."),
+    name: Optional[str] = typer.Argument(
+        None, help="Session name to reap (default: all exited sessions)."
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="List exited sessions without killing them."
+    ),
 ) -> None:
     """Reap exited tmux sessions fleet-wide.
 
@@ -510,7 +630,9 @@ def gc_sessions(
 
     # Fan out list command to all nodes.
     results = asyncio.run(
-        fan_out(config.nodes, build_list_cmd(), max_concurrent=config.max_concurrent_ssh)
+        fan_out(
+            config.nodes, build_list_cmd(), max_concurrent=config.max_concurrent_ssh
+        )
     )
 
     # Collect exited sessions as (node, session_name, exit_status) tuples.
@@ -557,6 +679,7 @@ def snapshot_cmd(ctx: typer.Context) -> None:
     path = asyncio.run(save_snapshot(config))
     # Reason: Count sessions from the snapshot file we just wrote to report accurately.
     import json
+
     data = json.loads(path.read_text())
     count = len(data.get("sessions", []))
     console.print(f"Saved {count} sessions to {path}")
@@ -565,7 +688,9 @@ def snapshot_cmd(ctx: typer.Context) -> None:
 @app.command("restore")
 def restore_cmd(
     ctx: typer.Context,
-    node: Optional[str] = typer.Option(None, "--node", help="Only restore sessions on this node."),
+    node: Optional[str] = typer.Option(
+        None, "--node", help="Only restore sessions on this node."
+    ),
 ) -> None:
     """Restore fleet state from a JSON snapshot file.
 

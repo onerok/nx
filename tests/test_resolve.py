@@ -30,9 +30,7 @@ class FakeProcess:
         returncode: Exit code to return.
     """
 
-    def __init__(
-        self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0
-    ):
+    def __init__(self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0):
         self.stdout = stdout
         self.stderr = stderr
         self.returncode = returncode
@@ -100,13 +98,9 @@ async def test_resolve_unique_match(monkeypatch, two_node_config):
         """
         # Reason: Local calls start with "tmux"; remote calls start with "ssh".
         if args[0] == "tmux":
-            return FakeProcess(
-                stdout=b"api|1|0|/home/u|bash|1234|0|\n", returncode=0
-            )
+            return FakeProcess(stdout=b"api|1|0|/home/u|bash|1234|0|\n", returncode=0)
         elif "dev-server" in args:
-            return FakeProcess(
-                stdout=b"data|1|0|/app|python|5678|0|\n", returncode=0
-            )
+            return FakeProcess(stdout=b"data|1|0|/app|python|5678|0|\n", returncode=0)
         return FakeProcess(stdout=b"", returncode=0)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
@@ -124,9 +118,7 @@ async def test_resolve_no_match(monkeypatch, two_node_config):
     async def fake_exec(*args, **kwargs):
         """Return only 'api' on local; nothing on dev-server."""
         if args[0] == "tmux":
-            return FakeProcess(
-                stdout=b"api|1|0|/home/u|bash|1234|0|\n", returncode=0
-            )
+            return FakeProcess(stdout=b"api|1|0|/home/u|bash|1234|0|\n", returncode=0)
         return FakeProcess(stdout=b"", returncode=0)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
@@ -143,19 +135,17 @@ async def test_resolve_ambiguous_interactive(monkeypatch, two_node_config):
     async def fake_exec(*args, **kwargs):
         """Both nodes have a session named 'api'."""
         if args[0] == "tmux":
-            return FakeProcess(
-                stdout=b"api|1|0|/home/u|bash|1234|0|\n", returncode=0
-            )
+            return FakeProcess(stdout=b"api|1|0|/home/u|bash|1234|0|\n", returncode=0)
         elif "dev-server" in args:
-            return FakeProcess(
-                stdout=b"api|1|0|/app|python|5678|0|\n", returncode=0
-            )
+            return FakeProcess(stdout=b"api|1|0|/app|python|5678|0|\n", returncode=0)
         return FakeProcess(stdout=b"", returncode=0)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
     # Reason: Mock isatty to simulate interactive terminal.
-    monkeypatch.setattr("nx.resolve.sys.stdin", type("FakeStdin", (), {"isatty": lambda self: True})())
+    monkeypatch.setattr(
+        "nx.resolve.sys.stdin", type("FakeStdin", (), {"isatty": lambda self: True})()
+    )
 
     # Capture subprocess.run calls for fzf.
     captured: list[dict] = []
@@ -192,19 +182,17 @@ async def test_resolve_ambiguous_piped(monkeypatch, two_node_config):
     async def fake_exec(*args, **kwargs):
         """Both nodes have a session named 'api'."""
         if args[0] == "tmux":
-            return FakeProcess(
-                stdout=b"api|1|0|/home/u|bash|1234|0|\n", returncode=0
-            )
+            return FakeProcess(stdout=b"api|1|0|/home/u|bash|1234|0|\n", returncode=0)
         elif "dev-server" in args:
-            return FakeProcess(
-                stdout=b"api|1|0|/app|python|5678|0|\n", returncode=0
-            )
+            return FakeProcess(stdout=b"api|1|0|/app|python|5678|0|\n", returncode=0)
         return FakeProcess(stdout=b"", returncode=0)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
     # Reason: Mock isatty to simulate piped/non-interactive stdin.
-    monkeypatch.setattr("nx.resolve.sys.stdin", type("FakeStdin", (), {"isatty": lambda self: False})())
+    monkeypatch.setattr(
+        "nx.resolve.sys.stdin", type("FakeStdin", (), {"isatty": lambda self: False})()
+    )
 
     with pytest.raises(AmbiguousSession) as exc_info:
         await resolve_session("api", two_node_config)
@@ -223,14 +211,14 @@ async def test_resolve_fzf_default_node_first(monkeypatch, three_node_config):
         """All three nodes have a session named 'api'."""
         # Reason: All calls return the same session "api".
         # Local (alpha) uses tmux directly; beta and gamma go through ssh.
-        return FakeProcess(
-            stdout=b"api|1|0|/home/u|bash|1234|0|\n", returncode=0
-        )
+        return FakeProcess(stdout=b"api|1|0|/home/u|bash|1234|0|\n", returncode=0)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
     # Interactive tty.
-    monkeypatch.setattr("nx.resolve.sys.stdin", type("FakeStdin", (), {"isatty": lambda self: True})())
+    monkeypatch.setattr(
+        "nx.resolve.sys.stdin", type("FakeStdin", (), {"isatty": lambda self: True})()
+    )
 
     captured: list[dict] = []
 
@@ -265,19 +253,17 @@ async def test_resolve_fzf_output_parsed(monkeypatch, two_node_config):
     async def fake_exec(*args, **kwargs):
         """Both nodes have a session named 'api'."""
         if args[0] == "tmux":
-            return FakeProcess(
-                stdout=b"api|1|0|/home/u|bash|1234|0|\n", returncode=0
-            )
+            return FakeProcess(stdout=b"api|1|0|/home/u|bash|1234|0|\n", returncode=0)
         elif "dev-server" in args:
-            return FakeProcess(
-                stdout=b"api|1|0|/app|python|5678|0|\n", returncode=0
-            )
+            return FakeProcess(stdout=b"api|1|0|/app|python|5678|0|\n", returncode=0)
         return FakeProcess(stdout=b"", returncode=0)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
     # Interactive tty.
-    monkeypatch.setattr("nx.resolve.sys.stdin", type("FakeStdin", (), {"isatty": lambda self: True})())
+    monkeypatch.setattr(
+        "nx.resolve.sys.stdin", type("FakeStdin", (), {"isatty": lambda self: True})()
+    )
 
     def fake_fzf(*args, **kwargs):
         """Return dev-server/api as the user's selection."""

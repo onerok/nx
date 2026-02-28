@@ -38,9 +38,7 @@ class FakeProcess:
         returncode: Exit code to return.
     """
 
-    def __init__(
-        self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0
-    ):
+    def __init__(self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0):
         self.stdout = stdout
         self.stderr = stderr
         self.returncode = returncode
@@ -114,9 +112,7 @@ def test_peek_output(monkeypatch):
         - Output contains all three lines.
         - The exec args contain "capture-pane" and "-S", "-30" (30-line default).
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     async def fake_resolve(name, config):
@@ -198,9 +194,7 @@ def test_logs_interactive_default(monkeypatch):
     Expected:
         - The exec args contain "-S", "-100" (interactive default).
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     async def fake_resolve(name, config):
@@ -243,9 +237,7 @@ def test_logs_piped_default(monkeypatch):
     Expected:
         - The exec args contain "-S", "-" (full scrollback).
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     async def fake_resolve(name, config):
@@ -285,9 +277,7 @@ def test_logs_custom_lines(monkeypatch):
     Expected:
         - The exec args contain "-S", "-50" (user-specified override).
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     async def fake_resolve(name, config):
@@ -324,9 +314,7 @@ def test_peek_nonexistent_session(monkeypatch):
         - exit_code == 1
         - Output contains "Session" and "not found".
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     async def fake_resolve(name, config):

@@ -1,6 +1,5 @@
 """Snapshot and restore fleet state."""
 
-import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -117,12 +116,16 @@ async def restore_snapshot(
         if node_filter and session.node != node_filter:
             continue
 
-        cmd = build_new_cmd(session.name, cmd=session.command, directory=session.directory)
+        cmd = build_new_cmd(
+            session.name, cmd=session.command, directory=session.directory
+        )
         result = await run_on_node(session.node, cmd)
 
         if result.returncode == 0:
             log.append(f"Restoring {session.node}/{session.name}... OK")
         else:
-            log.append(f"Restoring {session.node}/{session.name}... FAILED: {result.stderr}")
+            log.append(
+                f"Restoring {session.node}/{session.name}... FAILED: {result.stderr}"
+            )
 
     return log

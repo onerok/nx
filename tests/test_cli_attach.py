@@ -69,8 +69,15 @@ def test_attach_bare_terminal(monkeypatch):
     # Reason: Remote attach from bare terminal uses SSH to reach the node.
     assert file == "ssh"
     assert args == [
-        "ssh", "-t", "dev-server",
-        "tmux", "-L", "nexus", "attach", "-t", "api",
+        "ssh",
+        "-t",
+        "dev-server",
+        "tmux",
+        "-L",
+        "nexus",
+        "attach",
+        "-t",
+        "api",
     ]
 
 
@@ -83,9 +90,7 @@ def test_attach_bare_terminal_local(monkeypatch):
     Expected:
         - os.execvp is called with "tmux" and the local tmux attach args.
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
     monkeypatch.delenv("TMUX", raising=False)
 
@@ -124,9 +129,7 @@ def test_attach_from_nexus_local(monkeypatch):
         - subprocess.run is called with tmux switch-client args.
         - typer.Exit is raised (exit_code == 0).
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
     monkeypatch.setenv("TMUX", "/tmp/tmux-1000/nexus,12345,0")
 
@@ -153,7 +156,12 @@ def test_attach_from_nexus_local(monkeypatch):
     # Reason: Inside nexus tmux, local attach uses switch-client to stay
     # within the same nexus tmux server.
     assert captured_runs[0][0] == [
-        "tmux", "-L", "nexus", "switch-client", "-t", "api",
+        "tmux",
+        "-L",
+        "nexus",
+        "switch-client",
+        "-t",
+        "api",
     ]
 
 
@@ -198,9 +206,21 @@ def test_attach_from_nexus_remote(monkeypatch):
     # Reason: Inside nexus tmux, remote attach opens a new window that
     # SSHes to the remote node and attaches to the nexus session there.
     assert captured_runs[0][0] == [
-        "tmux", "-L", "nexus", "new-window", "-n", "api",
-        "ssh", "-t", "dev-server",
-        "tmux", "-L", "nexus", "attach", "-t", "api",
+        "tmux",
+        "-L",
+        "nexus",
+        "new-window",
+        "-n",
+        "api",
+        "ssh",
+        "-t",
+        "dev-server",
+        "tmux",
+        "-L",
+        "nexus",
+        "attach",
+        "-t",
+        "api",
     ]
 
 
@@ -245,9 +265,19 @@ def test_attach_from_user_tmux(monkeypatch):
     # Reason: Inside user's personal tmux (no "nexus"), a new window is
     # opened in the user's tmux that nests into the nexus session via SSH.
     assert captured_runs[0][0] == [
-        "tmux", "new-window", "-n", "api",
-        "ssh", "-t", "dev-server",
-        "tmux", "-L", "nexus", "attach", "-t", "api",
+        "tmux",
+        "new-window",
+        "-n",
+        "api",
+        "ssh",
+        "-t",
+        "dev-server",
+        "tmux",
+        "-L",
+        "nexus",
+        "attach",
+        "-t",
+        "api",
     ]
 
 

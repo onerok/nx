@@ -22,9 +22,7 @@ class NodeResult:
     node: str
 
 
-async def run_on_node(
-    node: str, cmd: list[str], timeout: int = 2
-) -> NodeResult:
+async def run_on_node(node: str, cmd: list[str], timeout: int = 2) -> NodeResult:
     """Execute a command on a node via SSH (or locally).
 
     If node is "local", runs the command directly via asyncio subprocess.
@@ -47,7 +45,8 @@ async def run_on_node(
     else:
         ssh_cmd = [
             "ssh",
-            "-o", f"ConnectTimeout={timeout}",
+            "-o",
+            f"ConnectTimeout={timeout}",
             node,
             shlex.join(cmd),
         ]

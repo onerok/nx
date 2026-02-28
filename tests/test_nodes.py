@@ -23,7 +23,6 @@ from nx.cli import app
 from nx.config import FleetConfig
 from nx.nodes import (
     SSH_CONFIG_TEMPLATE,
-    NodeStatus,
     discover_hosts,
     nodes_add,
     nodes_ls,
@@ -48,9 +47,7 @@ class FakeProcess:
         returncode: Exit code to return.
     """
 
-    def __init__(
-        self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0
-    ):
+    def __init__(self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0):
         self.stdout = stdout
         self.stderr = stderr
         self.returncode = returncode
@@ -129,7 +126,7 @@ def test_nodes_ls(monkeypatch, tmp_path):
     canonical_hash = _canonical_tmux_conf_hash()
 
     calls: list[tuple] = []
-    responses = {
+    {
         # Reason: local calls use "tmux" directly; remote calls use "ssh".
         # The local tmux -V check.
         "tmux -V": (b"tmux 3.4\n", b"", 0),
@@ -137,7 +134,11 @@ def test_nodes_ls(monkeypatch, tmp_path):
         # includes the node name and the tmux command.
         "ssh": (b"tmux 3.2\n", b"", 0),
         # The remote md5sum call — also via SSH. Return matching hash.
-        "md5sum": (f"{canonical_hash}  /home/u/.config/nexus/tmux.conf\n".encode(), b"", 0),
+        "md5sum": (
+            f"{canonical_hash}  /home/u/.config/nexus/tmux.conf\n".encode(),
+            b"",
+            0,
+        ),
     }
 
     # Reason: We need more fine-grained control. When the joined args
@@ -145,7 +146,11 @@ def test_nodes_ls(monkeypatch, tmp_path):
     # it contains "ssh" AND "tmux -V", we want the tmux version.
     # Rebuild with ordering that checks md5sum before generic ssh.
     ordered_responses = {
-        "md5sum": (f"{canonical_hash}  /home/u/.config/nexus/tmux.conf\n".encode(), b"", 0),
+        "md5sum": (
+            f"{canonical_hash}  /home/u/.config/nexus/tmux.conf\n".encode(),
+            b"",
+            0,
+        ),
         "tmux -V": (b"tmux 3.4\n", b"", 0),
     }
 
@@ -192,7 +197,7 @@ def test_nodes_ls_unreachable(monkeypatch):
     async def fake_exec(*args, **kwargs):
         """Local succeeds, remote fails."""
         calls.append(args)
-        joined = " ".join(str(a) for a in args)
+        " ".join(str(a) for a in args)
         if args[0] == "tmux":
             # Local call
             return FakeProcess(stdout=b"tmux 3.4\n", returncode=0)
@@ -326,9 +331,7 @@ def test_nodes_add_pushes_tmux_conf(monkeypatch, tmp_path):
     assert any("Pushed tmux.conf" in m for m in messages)
 
     # Reason: Verify that one of the subprocess calls involves writing tmux.conf.
-    tmux_conf_calls = [
-        c for c in calls if any("tmux.conf" in str(a) for a in c)
-    ]
+    tmux_conf_calls = [c for c in calls if any("tmux.conf" in str(a) for a in c)]
     assert len(tmux_conf_calls) >= 1
 
 
@@ -524,7 +527,10 @@ def test_nodes_rm_fleet_only(tmp_path):
     fleet_config = tmp_path / "fleet.toml"
 
     messages = nodes_rm(
-        "orphan-server", config, ssh_config_path=ssh_config, fleet_config_path=fleet_config
+        "orphan-server",
+        config,
+        ssh_config_path=ssh_config,
+        fleet_config_path=fleet_config,
     )
 
     assert "orphan-server" not in config.nodes
@@ -582,12 +588,7 @@ def test_parse_ssh_config_with_include(tmp_path):
     sub_config.write_text("Host delta\n    User ops\n")
 
     main_config = tmp_path / "config"
-    main_config.write_text(
-        f"Include {sub_dir}/*.conf\n"
-        "\n"
-        "Host alpha\n"
-        "    User root\n"
-    )
+    main_config.write_text(f"Include {sub_dir}/*.conf\n\nHost alpha\n    User root\n")
 
     hosts = parse_ssh_config_hosts(main_config)
 
@@ -659,7 +660,7 @@ def test_nodes_add_no_args_fzf(monkeypatch, tmp_path):
         - nodes_add is called with "alpha".
     """
     import subprocess as sp
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import patch
     import nx.cli as cli_mod
 
     monkeypatch.setattr(
@@ -685,8 +686,10 @@ def test_nodes_add_no_args_fzf(monkeypatch, tmp_path):
     # Reason: CliRunner replaces sys.stdin, so patching stdin.isatty
     # directly doesn't survive. We patch the entire sys module as seen
     # by cli.py to control isatty.
-    with patch.object(cli_mod, "subprocess") as mock_sp, \
-         patch.object(cli_mod, "sys") as mock_sys:
+    with (
+        patch.object(cli_mod, "subprocess") as mock_sp,
+        patch.object(cli_mod, "sys") as mock_sys,
+    ):
         mock_sp.run = fake_run
         mock_sys.stdin.isatty.return_value = True
 

@@ -12,7 +12,6 @@ accept a snapshot_path parameter to use a temp file instead of the default.
 import asyncio
 import json
 
-import pytest
 from typer.testing import CliRunner
 
 from nx.cli import app
@@ -37,9 +36,7 @@ class FakeProcess:
         returncode: Exit code to return.
     """
 
-    def __init__(
-        self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0
-    ):
+    def __init__(self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0):
         self.stdout = stdout
         self.stderr = stderr
         self.returncode = returncode
@@ -71,10 +68,7 @@ def test_snapshot_saves_state(monkeypatch, tmp_path):
         default_cmd="/bin/bash",
     )
 
-    local_output = (
-        b"api|1|0|/home/u|bash|1234|0|\n"
-        b"worker|1|0|/app|node|5678|0|\n"
-    )
+    local_output = b"api|1|0|/home/u|bash|1234|0|\nworker|1|0|/app|node|5678|0|\n"
     remote_output = b"pipeline|1|0|/data|python|9012|0|\n"
 
     async def fake_exec(*args, **kwargs):
@@ -115,10 +109,7 @@ def test_snapshot_schema_valid(monkeypatch, tmp_path):
         default_cmd="/bin/bash",
     )
 
-    local_output = (
-        b"api|1|0|/home/u|bash|1234|0|\n"
-        b"worker|1|0|/app|node|5678|0|\n"
-    )
+    local_output = b"api|1|0|/home/u|bash|1234|0|\nworker|1|0|/app|node|5678|0|\n"
     remote_output = b"pipeline|1|0|/data|python|9012|0|\n"
 
     async def fake_exec(*args, **kwargs):
@@ -174,8 +165,12 @@ def test_restore_creates_sessions(monkeypatch, tmp_path):
     snapshot_data = FleetSnapshot(
         timestamp="2026-02-24T12:00:00Z",
         sessions=[
-            SessionSnapshot(node="local", name="api", directory="/home/u", command="bash"),
-            SessionSnapshot(node="dev-server", name="pipeline", directory="/data", command="python"),
+            SessionSnapshot(
+                node="local", name="api", directory="/home/u", command="bash"
+            ),
+            SessionSnapshot(
+                node="dev-server", name="pipeline", directory="/data", command="python"
+            ),
         ],
     )
     snapshot_file = tmp_path / "snapshot.json"
@@ -226,9 +221,15 @@ def test_restore_specific_node(monkeypatch, tmp_path):
     snapshot_data = FleetSnapshot(
         timestamp="2026-02-24T12:00:00Z",
         sessions=[
-            SessionSnapshot(node="local", name="api", directory="/home/u", command="bash"),
-            SessionSnapshot(node="local", name="worker", directory="/app", command="node"),
-            SessionSnapshot(node="dev-server", name="pipeline", directory="/data", command="python"),
+            SessionSnapshot(
+                node="local", name="api", directory="/home/u", command="bash"
+            ),
+            SessionSnapshot(
+                node="local", name="worker", directory="/app", command="node"
+            ),
+            SessionSnapshot(
+                node="dev-server", name="pipeline", directory="/data", command="python"
+            ),
         ],
     )
     snapshot_file = tmp_path / "snapshot.json"
@@ -263,9 +264,7 @@ def test_restore_logs_output(monkeypatch):
         - Each log message appears in the CLI output.
         - "Restored {count} sessions" appears in output.
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     fake_logs = [
@@ -308,9 +307,7 @@ def test_restore_empty_snapshot(monkeypatch):
         - Exit code 0.
         - Output contains "No sessions to restore".
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     async def fake_restore(cfg, node_filter=None, snapshot_path=None):

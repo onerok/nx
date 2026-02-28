@@ -1,12 +1,11 @@
 """Tests for FleetConfig loading, validation, and env-var expansion (Milestone 1)."""
 
-import os
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from nx.config import FleetConfig, load_config
+from nx.config import load_config
 
 
 def test_load_valid_config(tmp_path: Path) -> None:
@@ -52,10 +51,7 @@ def test_expand_env_vars(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("NX_TEST_NODE", "staging-box")
 
     config_file = tmp_path / "fleet.toml"
-    config_file.write_text(
-        'default_cmd = "$SHELL"\n'
-        'default_node = "$NX_TEST_NODE"\n'
-    )
+    config_file.write_text('default_cmd = "$SHELL"\ndefault_node = "$NX_TEST_NODE"\n')
 
     config = load_config(config_file)
 

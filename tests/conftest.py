@@ -16,7 +16,9 @@ def mock_ssh():
             self.calls = []
             self._responses = {}
 
-        def register(self, pattern: str, stdout: str = "", stderr: str = "", returncode: int = 0):
+        def register(
+            self, pattern: str, stdout: str = "", stderr: str = "", returncode: int = 0
+        ):
             self._responses[pattern] = (stdout, stderr, returncode)
 
     yield MockSSH()
@@ -39,10 +41,11 @@ def tmp_config(tmp_path):
         'nodes = ["local", "dev-server"]\n'
         'default_node = "local"\n'
         'default_cmd = "/bin/bash"\n'
-        'max_concurrent_ssh = 16\n'
-        'auto_reap_clean_exit = true\n'
+        "max_concurrent_ssh = 16\n"
+        "auto_reap_clean_exit = true\n"
     )
     from nx.config import load_config
+
     config = load_config(config_file)
     yield config, config_file
 

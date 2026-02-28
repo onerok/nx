@@ -49,8 +49,12 @@ def build_list_cmd() -> list[str]:
         list[str]: Command arguments for tmux list-sessions.
     """
     return [
-        "tmux", "-L", SOCKET_NAME,
-        "list-sessions", "-F", FORMAT_STRING,
+        "tmux",
+        "-L",
+        SOCKET_NAME,
+        "list-sessions",
+        "-F",
+        FORMAT_STRING,
     ]
 
 
@@ -137,14 +141,19 @@ def build_capture_cmd(session: str, lines: int | str = 30) -> list[str]:
     """
     start = f"-{lines}" if isinstance(lines, int) else "-"
     return [
-        "tmux", "-L", SOCKET_NAME,
-        "capture-pane", "-p", "-t", session, "-S", start,
+        "tmux",
+        "-L",
+        SOCKET_NAME,
+        "capture-pane",
+        "-p",
+        "-t",
+        session,
+        "-S",
+        start,
     ]
 
 
-def build_send_keys_cmd(
-    session: str, keys: list[str], raw: bool = False
-) -> list[str]:
+def build_send_keys_cmd(session: str, keys: list[str], raw: bool = False) -> list[str]:
     """Build the tmux command to send keystrokes to a session.
 
     In default mode, automatically appends Enter after the last key.
@@ -177,6 +186,10 @@ def build_kill_cmd(session: str) -> list[str]:
         list[str]: Command arguments for tmux kill-session.
     """
     return [
-        "tmux", "-L", SOCKET_NAME,
-        "kill-session", "-t", session,
+        "tmux",
+        "-L",
+        SOCKET_NAME,
+        "kill-session",
+        "-t",
+        session,
     ]

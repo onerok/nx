@@ -35,9 +35,7 @@ class FakeProcess:
         returncode: Exit code to return.
     """
 
-    def __init__(
-        self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0
-    ):
+    def __init__(self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0):
         self.stdout = stdout
         self.stderr = stderr
         self.returncode = returncode
@@ -85,9 +83,7 @@ def test_send_auto_enter(monkeypatch):
         - Output contains "Sent to local/api".
         - exec args contain "send-keys", "-t", "api", "hello", "Enter".
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     async def fake_resolve(name, config):
@@ -132,9 +128,7 @@ def test_send_raw_mode(monkeypatch):
         - exec args contain "send-keys", "-t", "api", "C-c".
         - "Enter" is NOT in exec args (raw mode skips it).
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     async def fake_resolve(name, config):
@@ -178,9 +172,7 @@ def test_send_multiple_args(monkeypatch):
         - exec args contain both "cd /app" and "npm start".
         - exec args end with "Enter" (auto-Enter after last key).
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     async def fake_resolve(name, config):
@@ -267,9 +259,7 @@ def test_kill_session(monkeypatch):
         - Output contains "Killed session local/api".
         - exec args contain "kill-session", "-t", "api".
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     async def fake_resolve(name, config):
@@ -309,9 +299,7 @@ def test_kill_nonexistent(monkeypatch):
         - exit_code == 1
         - Output contains "Session" and "not found".
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     async def fake_resolve(name, config):

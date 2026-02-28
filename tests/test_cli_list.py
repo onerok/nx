@@ -10,7 +10,6 @@ a controlled FleetConfig.
 
 import asyncio
 
-import pytest
 from typer.testing import CliRunner
 
 from nx.cli import app
@@ -33,9 +32,7 @@ class FakeProcess:
         returncode: Exit code to return.
     """
 
-    def __init__(
-        self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0
-    ):
+    def __init__(self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0):
         self.stdout = stdout
         self.stderr = stderr
         self.returncode = returncode
@@ -59,9 +56,7 @@ def test_list_empty_fleet(monkeypatch):
         - Exit code 0.
         - Output contains "No active sessions".
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     async def fake_exec(*args, **kwargs):
@@ -85,14 +80,11 @@ def test_list_single_node(monkeypatch):
         - Exit code 0.
         - Output contains session names, commands, and [RUNNING] status.
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     tmux_output = (
-        b"api|1|0|/home/u/app|python|1234|0|\n"
-        b"worker|2|0|/home/u/app|celery|5678|0|\n"
+        b"api|1|0|/home/u/app|python|1234|0|\nworker|2|0|/home/u/app|celery|5678|0|\n"
     )
 
     async def fake_exec(*args, **kwargs):
@@ -229,9 +221,7 @@ def test_list_shows_status(monkeypatch):
         - Exit code 0.
         - Output contains [RUNNING], [EXITED 0], and [EXITED 1].
     """
-    config = FleetConfig(
-        nodes=["local"], default_node="local", default_cmd="/bin/bash"
-    )
+    config = FleetConfig(nodes=["local"], default_node="local", default_cmd="/bin/bash")
     monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
 
     tmux_output = (

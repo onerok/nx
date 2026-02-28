@@ -59,40 +59,83 @@ async def build_dashboard(config: "FleetConfig") -> list[str]:
     first_node, first_info = all_sessions[0]
     first_attach = _build_attach_cmd(first_node, first_info.name)
 
-    await run_on_node("local", [
-        "tmux", "-L", DASH_SOCKET, "new-session", "-d", "-s", DASH_SESSION,
-        *first_attach,
-    ])
+    await run_on_node(
+        "local",
+        [
+            "tmux",
+            "-L",
+            DASH_SOCKET,
+            "new-session",
+            "-d",
+            "-s",
+            DASH_SESSION,
+            *first_attach,
+        ],
+    )
 
     # Tag the first pane with @nx_target metadata.
     first_target = f"{first_node}/{first_info.name}"
-    await run_on_node("local", [
-        "tmux", "-L", DASH_SOCKET, "set-option", "-p", "-t", f"{DASH_SESSION}:0.0",
-        "@nx_target", first_target,
-    ])
+    await run_on_node(
+        "local",
+        [
+            "tmux",
+            "-L",
+            DASH_SOCKET,
+            "set-option",
+            "-p",
+            "-t",
+            f"{DASH_SESSION}:0.0",
+            "@nx_target",
+            first_target,
+        ],
+    )
 
     # Step 3-4: Split window for remaining sessions and tag each pane.
     for node, info in all_sessions[1:]:
         attach_cmd = _build_attach_cmd(node, info.name)
-        await run_on_node("local", [
-            "tmux", "-L", DASH_SOCKET, "split-window", "-t", DASH_SESSION,
-            *attach_cmd,
-        ])
+        await run_on_node(
+            "local",
+            [
+                "tmux",
+                "-L",
+                DASH_SOCKET,
+                "split-window",
+                "-t",
+                DASH_SESSION,
+                *attach_cmd,
+            ],
+        )
 
         target = f"{node}/{info.name}"
-        await run_on_node("local", [
-            "tmux", "-L", DASH_SOCKET, "set-option", "-p",
-            "@nx_target", target,
-        ])
+        await run_on_node(
+            "local",
+            [
+                "tmux",
+                "-L",
+                DASH_SOCKET,
+                "set-option",
+                "-p",
+                "@nx_target",
+                target,
+            ],
+        )
 
     # Step 5: Store NX_BIN path via set-environment.
     # Reason: The Enter-key shim needs to locate the nx binary at runtime.
     # shutil.which("nx") finds the installed entry point; sys.argv[0] is the
     # fallback for development invocations (e.g. `uv run nx`).
     nx_bin = shutil.which("nx") or sys.argv[0]
-    await run_on_node("local", [
-        "tmux", "-L", DASH_SOCKET, "set-environment", "NX_BIN", nx_bin,
-    ])
+    await run_on_node(
+        "local",
+        [
+            "tmux",
+            "-L",
+            DASH_SOCKET,
+            "set-environment",
+            "NX_BIN",
+            nx_bin,
+        ],
+    )
 
     # Step 6: Bind Enter to the teardown-and-attach shim.
     # Reason: The shim captures the target from pane metadata, tears down the
@@ -103,21 +146,88 @@ async def build_dashboard(config: "FleetConfig") -> list[str]:
         "tmux -L nx_dash detach-client && tmux -L nx_dash kill-session; "
         'exec "$NX_BIN" attach "$TARGET"'
     )
-    await run_on_node("local", [
-        "tmux", "-L", DASH_SOCKET, "bind-key", "-n", "Enter",
-        "run-shell", shim,
-    ])
+    await run_on_node(
+        "local",
+        [
+            "tmux",
+            "-L",
+            DASH_SOCKET,
+            "bind-key",
+            "-n",
+            "Enter",
+            "run-shell",
+            shim,
+        ],
+    )
 
-    # Step 7: Apply even-vertical layout so all panes are visible.
-    await run_on_node("local", [
-        "tmux", "-L", DASH_SOCKET, "select-layout", "-t", DASH_SESSION,
-        "even-vertical",
-    ])
+    # Bind Space to cycle layouts (tiled ↔ even-vertical ↔ etc.).
+    await run_on_node(
+        "local",
+        [
+            "tmux",
+            "-L",
+            DASH_SOCKET,
+            "bind-key",
+            "-n",
+            "Space",
+            "next-layout",
+        ],
+    )
+
+    # Pane border labels: show @nx_target (node/session) in each pane's border.
+    await run_on_node(
+        "local",
+        [
+            "tmux",
+            "-L",
+            DASH_SOCKET,
+            "set-option",
+            "-t",
+            DASH_SESSION,
+            "pane-border-status",
+            "top",
+        ],
+    )
+    await run_on_node(
+        "local",
+        [
+            "tmux",
+            "-L",
+            DASH_SOCKET,
+            "set-option",
+            "-t",
+            DASH_SESSION,
+            "pane-border-format",
+            " #{@nx_target} ",
+        ],
+    )
+
+    # Step 7: Apply tiled layout so panes fill the screen in a grid.
+    await run_on_node(
+        "local",
+        [
+            "tmux",
+            "-L",
+            DASH_SOCKET,
+            "select-layout",
+            "-t",
+            DASH_SESSION,
+            "tiled",
+        ],
+    )
 
     # Select first pane so the user starts at the top.
-    await run_on_node("local", [
-        "tmux", "-L", DASH_SOCKET, "select-pane", "-t", f"{DASH_SESSION}:0.0",
-    ])
+    await run_on_node(
+        "local",
+        [
+            "tmux",
+            "-L",
+            DASH_SOCKET,
+            "select-pane",
+            "-t",
+            f"{DASH_SESSION}:0.0",
+        ],
+    )
 
     # Return the execvp args for attaching to the dashboard.
     return ["tmux", "-L", DASH_SOCKET, "attach", "-t", DASH_SESSION]

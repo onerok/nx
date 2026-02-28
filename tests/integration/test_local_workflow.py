@@ -8,11 +8,8 @@ functions against actual tmux.
 import asyncio
 import subprocess
 import time
-from pathlib import Path
 
-import pytest
 
-from nx.config import FleetConfig
 from nx.resolve import resolve_session
 from nx.snapshot import save_snapshot, restore_snapshot
 from nx.ssh import run_on_node
@@ -34,7 +31,6 @@ def _cleanup_session(name: str) -> None:
 # ---- Test 1: test_full_lifecycle ----
 def test_full_lifecycle(nx_test_config):
     """new -> list -> peek -> send -> logs -> kill: full session lifecycle."""
-    config = nx_test_config
     name = "integ-lifecycle"
 
     try:
@@ -55,9 +51,7 @@ def test_full_lifecycle(nx_test_config):
         assert result.returncode == 0
 
         # Send "hello"
-        result = asyncio.run(
-            run_on_node("local", build_send_keys_cmd(name, ["hello"]))
-        )
+        result = asyncio.run(run_on_node("local", build_send_keys_cmd(name, ["hello"])))
         assert result.returncode == 0
         time.sleep(0.5)
 
@@ -89,7 +83,6 @@ def test_full_lifecycle(nx_test_config):
 # ---- Test 2: test_send_peek_roundtrip ----
 def test_send_peek_roundtrip(nx_test_config):
     """Send text to a cat session and verify it appears in peek output."""
-    config = nx_test_config
     name = "integ-roundtrip"
 
     try:
@@ -165,7 +158,6 @@ def test_gc_cleans_exited(nx_test_config):
     """Create a session with 'exit 0', wait for exit, gc, verify gone."""
     import nx.tmux
 
-    config = nx_test_config
     name = "integ-gc-exit"
     keepalive = "integ-gc-keepalive"
     socket = nx.tmux.SOCKET_NAME
@@ -174,16 +166,12 @@ def test_gc_cleans_exited(nx_test_config):
         # Reason: Create a keep-alive session so the tmux server doesn't
         # shut down when the test session exits (tmux kills the server
         # when the last session is gone).
-        result = asyncio.run(
-            run_on_node("local", build_new_cmd(keepalive, cmd="cat"))
-        )
+        result = asyncio.run(run_on_node("local", build_new_cmd(keepalive, cmd="cat")))
         assert result.returncode == 0
 
         # Create the session that will exit. Use "sleep 1" so we have
         # time to set remain-on-exit before it finishes.
-        result = asyncio.run(
-            run_on_node("local", build_new_cmd(name, cmd="sleep 1"))
-        )
+        result = asyncio.run(run_on_node("local", build_new_cmd(name, cmd="sleep 1")))
         assert result.returncode == 0
 
         # Reason: Set remain-on-exit so tmux keeps the dead pane visible
@@ -191,7 +179,16 @@ def test_gc_cleans_exited(nx_test_config):
         result = asyncio.run(
             run_on_node(
                 "local",
-                ["tmux", "-L", socket, "set-option", "-t", name, "remain-on-exit", "on"],
+                [
+                    "tmux",
+                    "-L",
+                    socket,
+                    "set-option",
+                    "-t",
+                    name,
+                    "remain-on-exit",
+                    "on",
+                ],
             )
         )
         assert result.returncode == 0
@@ -251,7 +248,6 @@ def test_resolution_fully_qualified(nx_test_config):
 # ---- Test 6: test_new_duplicate_rejected ----
 def test_new_duplicate_rejected(nx_test_config):
     """Creating a session with the same name twice fails."""
-    config = nx_test_config
     name = "integ-dup"
 
     try:
@@ -263,9 +259,9 @@ def test_new_duplicate_rejected(nx_test_config):
         # Second creation -- should fail with "duplicate session"
         result = asyncio.run(run_on_node("local", build_new_cmd(name, cmd="cat")))
         assert result.returncode != 0
-        assert "duplicate" in result.stderr.lower() or "exists" in result.stderr.lower(), (
-            f"Expected duplicate error, got: {result.stderr}"
-        )
+        assert (
+            "duplicate" in result.stderr.lower() or "exists" in result.stderr.lower()
+        ), f"Expected duplicate error, got: {result.stderr}"
     finally:
         _cleanup_session(name)
 
@@ -273,7 +269,6 @@ def test_new_duplicate_rejected(nx_test_config):
 # ---- Test 7: test_fzf_roundtrip ----
 def test_fzf_roundtrip(nx_test_config):
     """Verify fzf format/parse contract: create sessions, filter, parse back."""
-    config = nx_test_config
     names = ["integ-fzf-alpha", "integ-fzf-beta"]
 
     try:
@@ -308,12 +303,9 @@ def test_fzf_roundtrip(nx_test_config):
 # ---- Test 8: test_list_empty_fleet ----
 def test_list_empty_fleet(nx_test_config):
     """No sessions -> list returns empty (tmux server may not even exist)."""
-    config = nx_test_config
 
     # Kill any leftover sessions first
-    asyncio.run(
-        run_on_node("local", ["tmux", "-L", "nx_test", "kill-server"])
-    )
+    asyncio.run(run_on_node("local", ["tmux", "-L", "nx_test", "kill-server"]))
     time.sleep(0.3)
 
     # List sessions -- should return non-zero (no server) or empty output
