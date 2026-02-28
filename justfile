@@ -8,6 +8,10 @@ default:
 install:
     uv sync
 
+# Install nx globally as an editable uv tool
+tool-install:
+    uv tool install --editable . --force
+
 # Run all unit tests (no integration)
 test *ARGS:
     uv run pytest tests/ -x -v --ignore=tests/integration {{ARGS}}
