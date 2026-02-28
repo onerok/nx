@@ -13,6 +13,7 @@ that the correct tmux (and optionally SSH) command is constructed.
 
 import asyncio
 import os
+import subprocess
 
 import pytest
 from typer.testing import CliRunner
@@ -98,7 +99,7 @@ def test_new_local_default(monkeypatch):
         asyncio, "create_subprocess_exec", _make_fake_exec(calls)
     )
 
-    result = runner.invoke(app, ["new", "api"])
+    result = runner.invoke(app, ["new", "-D", "api"])
 
     assert result.exit_code == 0
     assert "Created session local/api" in result.output
@@ -148,7 +149,7 @@ def test_new_remote(monkeypatch):
         asyncio, "create_subprocess_exec", _make_fake_exec(calls)
     )
 
-    result = runner.invoke(app, ["new", "--on", "dev-server", "api"])
+    result = runner.invoke(app, ["new", "-D", "--on", "dev-server", "api"])
 
     assert result.exit_code == 0
     assert "Created session dev-server/api" in result.output
@@ -187,7 +188,7 @@ def test_new_with_dir(monkeypatch):
         asyncio, "create_subprocess_exec", _make_fake_exec(calls)
     )
 
-    result = runner.invoke(app, ["new", "--dir", "/tmp", "api"])
+    result = runner.invoke(app, ["new", "-D", "--dir", "/tmp", "api"])
 
     assert result.exit_code == 0
 
@@ -221,7 +222,7 @@ def test_new_default_dir_local(monkeypatch):
         asyncio, "create_subprocess_exec", _make_fake_exec(calls)
     )
 
-    result = runner.invoke(app, ["new", "api"])
+    result = runner.invoke(app, ["new", "-D", "api"])
 
     assert result.exit_code == 0
 
@@ -257,7 +258,7 @@ def test_new_default_dir_remote(monkeypatch):
         asyncio, "create_subprocess_exec", _make_fake_exec(calls)
     )
 
-    result = runner.invoke(app, ["new", "--on", "dev-server", "api"])
+    result = runner.invoke(app, ["new", "-D", "--on", "dev-server", "api"])
 
     assert result.exit_code == 0
 
@@ -291,7 +292,7 @@ def test_new_default_cmd(monkeypatch):
         asyncio, "create_subprocess_exec", _make_fake_exec(calls)
     )
 
-    result = runner.invoke(app, ["new", "api"])
+    result = runner.invoke(app, ["new", "-D", "api"])
 
     assert result.exit_code == 0
 
@@ -327,10 +328,308 @@ def test_new_duplicate_name(monkeypatch):
         asyncio, "create_subprocess_exec", _make_fake_exec(calls, error_proc)
     )
 
-    result = runner.invoke(app, ["new", "api"])
+    result = runner.invoke(app, ["new", "-D", "api"])
 
     assert result.exit_code == 1
     # Reason: Rich console adds ANSI escape codes around 'api', so we
     # assert on the plain-text fragments that bracket the styled name.
     assert "Error: Session" in result.output
     assert "already exists on local." in result.output
+
+
+def test_new_auto_name(monkeypatch):
+    """Omitting the session name auto-generates a coolname slug.
+
+    Scenario:
+        - Config: default_node="local"
+        - Invoke: ["new"] (no name argument)
+        - Monkeypatch generate_slug to return "brave-penguin"
+    Expected:
+        - exit_code == 0
+        - Output contains "Created session local/brave-penguin"
+        - Exec args contain "brave-penguin" as the session name
+    """
+    config = FleetConfig(
+        nodes=["local"], default_node="local", default_cmd="/bin/bash"
+    )
+    monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
+    monkeypatch.setattr("nx.cli.generate_slug", lambda n: "brave-penguin")
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_exec", _make_fake_exec(calls)
+    )
+
+    result = runner.invoke(app, ["new", "-D"])
+
+    assert result.exit_code == 0
+    assert "Created session local/brave-penguin" in result.output
+
+    assert len(calls) == 1
+    args = calls[0]
+    assert "brave-penguin" in args
+
+
+def test_new_fzf_node_picker(monkeypatch):
+    """fzf picker is invoked when multiple nodes and no --on.
+
+    Scenario:
+        - Config: nodes=["local", "dev-server", "staging"], default_node="local"
+        - stdin is a tty
+        - fzf returns "dev-server"
+        - Invoke: ["new", "api"] (no --on)
+    Expected:
+        - subprocess.run is called with fzf and the node list
+        - default_node appears first in the fzf input
+        - Session is created on fzf-selected node "dev-server"
+    """
+    config = FleetConfig(
+        nodes=["local", "dev-server", "staging"],
+        default_node="local",
+        default_cmd="/bin/bash",
+    )
+    monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
+    monkeypatch.setattr("nx.cli._stdin_is_tty", lambda: True)
+
+    # Track fzf calls and return "dev-server" as the selection.
+    fzf_calls: list[tuple] = []
+    real_subprocess_run = subprocess.run
+
+    def fake_subprocess_run(cmd, **kwargs):
+        """Intercept fzf calls; pass through others."""
+        if cmd[0] == "fzf":
+            fzf_calls.append((cmd, kwargs))
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout="dev-server\n", stderr=""
+            )
+        return real_subprocess_run(cmd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
+
+    # Mock create_subprocess_exec for the tmux call.
+    exec_calls: list[tuple] = []
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_exec", _make_fake_exec(exec_calls)
+    )
+
+    result = runner.invoke(app, ["new", "-D", "api"])
+
+    assert result.exit_code == 0
+    assert "Created session dev-server/api" in result.output
+
+    # Verify fzf was called with correct prompt.
+    assert len(fzf_calls) == 1
+    fzf_cmd, fzf_kwargs = fzf_calls[0]
+    assert fzf_cmd == ["fzf", "--prompt", "Select node: "]
+
+    # Verify default_node "local" appears first in the fzf input.
+    fzf_input = fzf_kwargs["input"]
+    lines = fzf_input.strip().split("\n")
+    assert lines[0] == "local"
+
+    # Verify the tmux command targeted dev-server (via SSH).
+    assert len(exec_calls) == 1
+    assert exec_calls[0][0] == "ssh"
+    assert "dev-server" in exec_calls[0]
+
+
+def test_new_on_flag_triggers_picker(monkeypatch):
+    """--on without a value triggers fzf node picker.
+
+    Scenario:
+        - Config: nodes=["local", "dev-server"], default_node="local"
+        - Invoke: ["new", "--on"] (--on as last arg, no value)
+        - fzf returns "dev-server"
+    Expected:
+        - fzf is invoked to pick a node
+        - Session name is auto-generated (no name arg)
+        - Session is created on fzf-selected node "dev-server"
+    """
+    config = FleetConfig(
+        nodes=["local", "dev-server"],
+        default_node="local",
+        default_cmd="/bin/bash",
+    )
+    monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
+    monkeypatch.setattr("nx.cli.generate_slug", lambda n: "brave-penguin")
+
+    fzf_calls: list[tuple] = []
+    real_subprocess_run = subprocess.run
+
+    def fake_subprocess_run(cmd, **kwargs):
+        """Intercept fzf calls; pass through others."""
+        if cmd[0] == "fzf":
+            fzf_calls.append((cmd, kwargs))
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout="dev-server\n", stderr=""
+            )
+        return real_subprocess_run(cmd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
+
+    exec_calls: list[tuple] = []
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_exec", _make_fake_exec(exec_calls)
+    )
+
+    result = runner.invoke(app, ["new", "-D", "--on"])
+
+    assert result.exit_code == 0
+    assert "Created session dev-server/brave-penguin" in result.output
+    assert len(fzf_calls) == 1
+
+
+def test_new_single_node_no_fzf(monkeypatch):
+    """Single-node fleet skips fzf and uses the only node directly.
+
+    Scenario:
+        - Config: nodes=["local"], default_node="local"
+        - Invoke: ["new", "api"] (no --on)
+    Expected:
+        - No fzf call; session created on "local".
+    """
+    config = FleetConfig(
+        nodes=["local"], default_node="local", default_cmd="/bin/bash"
+    )
+    monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
+
+    fzf_called = False
+    real_subprocess_run = subprocess.run
+
+    def fake_subprocess_run(cmd, **kwargs):
+        """Fail if fzf is invoked."""
+        nonlocal fzf_called
+        if cmd[0] == "fzf":
+            fzf_called = True
+        return real_subprocess_run(cmd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
+
+    exec_calls: list[tuple] = []
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_exec", _make_fake_exec(exec_calls)
+    )
+
+    result = runner.invoke(app, ["new", "-D", "api"])
+
+    assert result.exit_code == 0
+    assert not fzf_called
+    assert "Created session local/api" in result.output
+
+
+def test_new_multi_node_not_tty_uses_default(monkeypatch):
+    """Non-interactive multi-node fleet falls back to default_node.
+
+    Scenario:
+        - Config: nodes=["local", "dev-server"], default_node="local"
+        - stdin is NOT a tty (piped)
+        - Invoke: ["new", "api"] (no --on)
+    Expected:
+        - No fzf call; session created on default_node "local".
+    """
+    config = FleetConfig(
+        nodes=["local", "dev-server"],
+        default_node="local",
+        default_cmd="/bin/bash",
+    )
+    monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
+    monkeypatch.setattr("nx.cli._stdin_is_tty", lambda: False)
+
+    fzf_called = False
+    real_subprocess_run = subprocess.run
+
+    def fake_subprocess_run(cmd, **kwargs):
+        """Fail if fzf is invoked."""
+        nonlocal fzf_called
+        if cmd[0] == "fzf":
+            fzf_called = True
+        return real_subprocess_run(cmd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
+
+    exec_calls: list[tuple] = []
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_exec", _make_fake_exec(exec_calls)
+    )
+
+    result = runner.invoke(app, ["new", "-D", "api"])
+
+    assert result.exit_code == 0
+    assert not fzf_called
+    assert "Created session local/api" in result.output
+
+
+def test_new_auto_attach(monkeypatch):
+    """nx new auto-attaches to the created session by default.
+
+    Scenario:
+        - Config: default_node="local"
+        - No TMUX env (bare terminal -> execvp path)
+        - Invoke: ["new", "api"] (no -D flag)
+    Expected:
+        - Session is created successfully
+        - os.execvp is called with tmux attach args
+    """
+    config = FleetConfig(
+        nodes=["local"], default_node="local", default_cmd="/bin/bash"
+    )
+    monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
+    monkeypatch.delenv("TMUX", raising=False)
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_exec", _make_fake_exec(calls)
+    )
+
+    # Track execvp calls instead of letting it replace the process.
+    execvp_calls: list[tuple] = []
+
+    def fake_execvp(file, args):
+        """Record execvp call."""
+        execvp_calls.append((file, args))
+
+    monkeypatch.setattr(os, "execvp", fake_execvp)
+
+    result = runner.invoke(app, ["new", "api"])
+
+    assert result.exit_code == 0
+    assert "Created session local/api" in result.output
+
+    # Reason: Auto-attach calls execvp with tmux attach.
+    assert len(execvp_calls) == 1
+    file, args = execvp_calls[0]
+    assert file == "tmux"
+    assert "-L" in args
+    assert "nexus" in args
+    assert "attach" in args
+    assert "-t" in args
+    assert "api" in args
+
+
+def test_new_detach_skips_attach(monkeypatch):
+    """--detach / -D skips auto-attach.
+
+    Scenario:
+        - Config: default_node="local"
+        - Invoke: ["new", "-D", "api"]
+    Expected:
+        - Session is created but os.execvp is NOT called.
+    """
+    config = FleetConfig(
+        nodes=["local"], default_node="local", default_cmd="/bin/bash"
+    )
+    monkeypatch.setattr("nx.cli.load_config", lambda path=None: config)
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_exec", _make_fake_exec(calls)
+    )
+
+    execvp_calls: list[tuple] = []
+    monkeypatch.setattr(os, "execvp", lambda f, a: execvp_calls.append((f, a)))
+
+    result = runner.invoke(app, ["new", "-D", "api"])
+
+    assert result.exit_code == 0
+    assert "Created session local/api" in result.output
+    assert len(execvp_calls) == 0

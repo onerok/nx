@@ -24,9 +24,11 @@ from nx.config import FleetConfig
 from nx.nodes import (
     SSH_CONFIG_TEMPLATE,
     NodeStatus,
+    discover_hosts,
     nodes_add,
     nodes_ls,
     nodes_rm,
+    parse_ssh_config_hosts,
 )
 
 runner = CliRunner()
@@ -424,52 +426,320 @@ def test_nodes_add_idempotent(monkeypatch, tmp_path):
 
 
 def test_nodes_rm(tmp_path):
-    """nodes_rm removes the Host block from the SSH config file.
+    """nodes_rm removes the Host block from the SSH config file and fleet config.
 
     Scenario:
         - SSH config contains a Host block for "dev-server".
+        - Fleet config includes "dev-server".
     Expected:
         - After removal, "Host dev-server" is no longer in the file.
+        - Fleet config no longer includes "dev-server".
         - Log includes "Removed SSH config for dev-server".
     """
+    config = FleetConfig(
+        nodes=["local", "dev-server"],
+        default_node="local",
+        default_cmd="/bin/bash",
+    )
+
     ssh_config = tmp_path / "nexus_config"
     block = SSH_CONFIG_TEMPLATE.format(host="dev-server")
     ssh_config.write_text(block)
 
-    messages = nodes_rm("dev-server", ssh_config_path=ssh_config)
+    fleet_config = tmp_path / "fleet.toml"
+
+    messages = nodes_rm(
+        "dev-server", config, ssh_config_path=ssh_config, fleet_config_path=fleet_config
+    )
 
     content = ssh_config.read_text()
     assert "Host dev-server" not in content
+    assert "dev-server" not in config.nodes
     assert any("Removed SSH config for dev-server" in m for m in messages)
 
 
 def test_nodes_rm_nonexistent(tmp_path):
-    """nodes_rm raises ValueError for a host not in the SSH config.
+    """nodes_rm raises ValueError for a host not in SSH config or fleet.
 
     Scenario:
         - SSH config exists but does not contain "unknown-host".
+        - Fleet config does not contain "unknown-host".
     Expected:
         - ValueError with descriptive message.
     """
+    config = FleetConfig(
+        nodes=["local"],
+        default_node="local",
+        default_cmd="/bin/bash",
+    )
+
     ssh_config = tmp_path / "nexus_config"
     # Write a different host block so the file exists.
     block = SSH_CONFIG_TEMPLATE.format(host="other-server")
     ssh_config.write_text(block)
 
     with pytest.raises(ValueError, match="not found"):
-        nodes_rm("unknown-host", ssh_config_path=ssh_config)
+        nodes_rm("unknown-host", config, ssh_config_path=ssh_config)
 
 
 def test_nodes_rm_no_config_file(tmp_path):
-    """nodes_rm raises ValueError when the SSH config file doesn't exist.
+    """nodes_rm raises ValueError when host is in neither SSH config nor fleet.
 
     Scenario:
         - No SSH config file at the specified path.
+        - Fleet config does not contain the host.
     Expected:
         - ValueError mentioning the host is not found.
     """
+    config = FleetConfig(
+        nodes=["local"],
+        default_node="local",
+        default_cmd="/bin/bash",
+    )
+
     ssh_config = tmp_path / "nexus_config"
     # File does not exist.
 
     with pytest.raises(ValueError, match="not found"):
-        nodes_rm("any-host", ssh_config_path=ssh_config)
+        nodes_rm("any-host", config, ssh_config_path=ssh_config)
+
+
+def test_nodes_rm_fleet_only(tmp_path):
+    """nodes_rm removes host from fleet config even without SSH config entry.
+
+    Scenario:
+        - Host is in fleet config but not in SSH config.
+    Expected:
+        - Host removed from fleet config.
+        - No error raised.
+    """
+    config = FleetConfig(
+        nodes=["local", "orphan-server"],
+        default_node="local",
+        default_cmd="/bin/bash",
+    )
+
+    ssh_config = tmp_path / "nexus_config"
+    ssh_config.write_text("")
+    fleet_config = tmp_path / "fleet.toml"
+
+    messages = nodes_rm(
+        "orphan-server", config, ssh_config_path=ssh_config, fleet_config_path=fleet_config
+    )
+
+    assert "orphan-server" not in config.nodes
+    assert any("Removed orphan-server from fleet config" in m for m in messages)
+
+
+# ---------------------------------------------------------------------------
+# parse_ssh_config_hosts tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_ssh_config_hosts(tmp_path):
+    """parse_ssh_config_hosts extracts hosts and skips wildcards.
+
+    Scenario:
+        - SSH config has single-host lines, a multi-host line, and wildcards.
+    Expected:
+        - Concrete hostnames returned; wildcards filtered out.
+    """
+    ssh_config = tmp_path / "config"
+    ssh_config.write_text(
+        "Host alpha\n"
+        "    User root\n"
+        "\n"
+        "Host beta gamma\n"
+        "    User deploy\n"
+        "\n"
+        "Host *\n"
+        "    ServerAliveInterval 60\n"
+        "\n"
+        "Host !internal\n"
+        "    ProxyJump bastion\n"
+        "\n"
+        "Host jump-?.example.com\n"
+        "    User admin\n"
+    )
+
+    hosts = parse_ssh_config_hosts(ssh_config)
+
+    assert hosts == ["alpha", "beta", "gamma"]
+
+
+def test_parse_ssh_config_with_include(tmp_path):
+    """parse_ssh_config_hosts follows Include directives.
+
+    Scenario:
+        - Main config includes a sub-config via Include directive.
+        - Sub-config defines additional hosts.
+    Expected:
+        - Hosts from both files are returned.
+    """
+    sub_dir = tmp_path / "config.d"
+    sub_dir.mkdir()
+    sub_config = sub_dir / "extra.conf"
+    sub_config.write_text("Host delta\n    User ops\n")
+
+    main_config = tmp_path / "config"
+    main_config.write_text(
+        f"Include {sub_dir}/*.conf\n"
+        "\n"
+        "Host alpha\n"
+        "    User root\n"
+    )
+
+    hosts = parse_ssh_config_hosts(main_config)
+
+    assert "alpha" in hosts
+    assert "delta" in hosts
+
+
+def test_parse_ssh_config_missing_file(tmp_path):
+    """parse_ssh_config_hosts returns empty list for missing file.
+
+    Scenario:
+        - SSH config file does not exist.
+    Expected:
+        - Empty list returned, no error.
+    """
+    hosts = parse_ssh_config_hosts(tmp_path / "nonexistent")
+
+    assert hosts == []
+
+
+# ---------------------------------------------------------------------------
+# discover_hosts tests
+# ---------------------------------------------------------------------------
+
+
+def test_discover_hosts_filters_fleet(tmp_path):
+    """discover_hosts subtracts existing fleet nodes from SSH config hosts.
+
+    Scenario:
+        - SSH config has hosts: alpha, beta, gamma.
+        - Fleet already contains: local, alpha.
+    Expected:
+        - Only beta and gamma returned.
+    """
+    ssh_config = tmp_path / "config"
+    ssh_config.write_text(
+        "Host alpha\n"
+        "    User root\n"
+        "Host beta\n"
+        "    User deploy\n"
+        "Host gamma\n"
+        "    User ops\n"
+    )
+
+    config = FleetConfig(
+        nodes=["local", "alpha"],
+        default_node="local",
+        default_cmd="/bin/bash",
+    )
+
+    candidates = discover_hosts(config, ssh_config_path=ssh_config)
+
+    assert candidates == ["beta", "gamma"]
+
+
+# ---------------------------------------------------------------------------
+# CLI nodes add (no args) tests
+# ---------------------------------------------------------------------------
+
+
+def test_nodes_add_no_args_fzf(monkeypatch, tmp_path):
+    """nodes add with no args invokes fzf when multiple candidates exist.
+
+    Scenario:
+        - SSH config has hosts: alpha, beta.
+        - Fleet has only local.
+        - fzf returns "alpha".
+    Expected:
+        - nodes_add is called with "alpha".
+    """
+    import subprocess as sp
+    from unittest.mock import MagicMock, patch
+    import nx.cli as cli_mod
+
+    monkeypatch.setattr(
+        "nx.cli.discover_hosts",
+        lambda config, **kw: ["alpha", "beta"],
+    )
+
+    captured = {}
+
+    async def fake_nodes_add(host, config, **kw):
+        captured["host"] = host
+        return [f"Added {host}"]
+
+    monkeypatch.setattr("nx.cli.nodes_add", fake_nodes_add)
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/fzf")
+
+    def fake_run(cmd, **kwargs):
+        """Intercept fzf calls."""
+        if cmd and cmd[0] == "fzf":
+            return sp.CompletedProcess(cmd, 0, stdout="alpha\n", stderr="")
+        return sp.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    # Reason: CliRunner replaces sys.stdin, so patching stdin.isatty
+    # directly doesn't survive. We patch the entire sys module as seen
+    # by cli.py to control isatty.
+    with patch.object(cli_mod, "subprocess") as mock_sp, \
+         patch.object(cli_mod, "sys") as mock_sys:
+        mock_sp.run = fake_run
+        mock_sys.stdin.isatty.return_value = True
+
+        result = runner.invoke(app, ["nodes", "add"])
+
+    assert result.exit_code == 0
+    assert captured["host"] == "alpha"
+
+
+def test_nodes_add_no_args_single_host(monkeypatch, tmp_path):
+    """nodes add with no args auto-selects when only 1 candidate.
+
+    Scenario:
+        - Only one candidate host available.
+    Expected:
+        - Auto-selected without fzf.
+    """
+    monkeypatch.setattr(
+        "nx.cli.discover_hosts",
+        lambda config, **kw: ["only-host"],
+    )
+
+    captured = {}
+
+    async def fake_nodes_add(host, config, **kw):
+        captured["host"] = host
+        return [f"Added {host}"]
+
+    monkeypatch.setattr("nx.cli.nodes_add", fake_nodes_add)
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/fzf")
+
+    result = runner.invoke(app, ["nodes", "add"])
+
+    assert result.exit_code == 0
+    assert captured["host"] == "only-host"
+    assert "Auto-selected" in result.output
+
+
+def test_nodes_add_no_candidates(monkeypatch):
+    """nodes add with no args exits with error when no candidates found.
+
+    Scenario:
+        - All SSH config hosts already in fleet.
+    Expected:
+        - Error message and exit code 1.
+    """
+    monkeypatch.setattr(
+        "nx.cli.discover_hosts",
+        lambda config, **kw: [],
+    )
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/fzf")
+
+    result = runner.invoke(app, ["nodes", "add"])
+
+    assert result.exit_code == 1
+    assert "No new hosts" in result.output

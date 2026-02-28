@@ -77,3 +77,29 @@ def load_config(path: Path | None = None) -> FleetConfig:
         data = tomllib.load(f)
 
     return FleetConfig(**data)
+
+
+def save_config(config: FleetConfig, path: Path | None = None) -> None:
+    """Save fleet configuration to TOML file.
+
+    Writes the fleet config to the given path (or the default
+    ~/.config/nexus/fleet.toml). Creates parent directories if needed.
+
+    Args:
+        config: Fleet configuration to save.
+        path: Path to the config file. Defaults to ~/.config/nexus/fleet.toml.
+    """
+    config_path = path or DEFAULT_CONFIG_PATH
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Reason: We write TOML manually to avoid adding a tomli_w dependency.
+    # The fleet config schema is flat and simple.
+    nodes_str = ", ".join(f'"{n}"' for n in config.nodes)
+    lines = [
+        f"nodes = [{nodes_str}]",
+        f'default_node = "{config.default_node}"',
+        f'default_cmd = "{config.default_cmd}"',
+        f"max_concurrent_ssh = {config.max_concurrent_ssh}",
+        f"auto_reap_clean_exit = {'true' if config.auto_reap_clean_exit else 'false'}",
+    ]
+    config_path.write_text("\n".join(lines) + "\n")

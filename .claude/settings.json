@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/onerok/src/github/onerok/nx && just check && just smoke",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

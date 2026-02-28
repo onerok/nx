@@ -8,6 +8,7 @@ import sys
 from typing import Optional
 
 import typer
+from coolname import generate_slug
 from rich.console import Console
 from rich.table import Table
 
@@ -15,10 +16,43 @@ from nx import __version__
 from nx.config import FleetConfig, load_config
 from nx.ssh import fan_out, run_on_node
 from nx.resolve import AmbiguousSession, SessionNotFound, resolve_session
-from nx.nodes import nodes_ls, nodes_add, nodes_rm
+from nx.nodes import nodes_ls, nodes_add, nodes_rm, discover_hosts
 from nx.tmux import build_list_cmd, build_new_cmd, build_capture_cmd, build_send_keys_cmd, build_kill_cmd, parse_list_output
 from nx.snapshot import save_snapshot, restore_snapshot
 from nx.dashboard import build_dashboard
+
+
+_PICK_NODE = "__pick__"
+
+
+class _OptionalOnCommand(typer.core.TyperCommand):
+    """Typer command that allows --on without a value.
+
+    Reason: Typer/Click requires --on to have a value. This subclass
+    intercepts arg parsing and injects a sentinel when --on appears
+    without a following value, so the fzf picker is triggered.
+    """
+
+    def parse_args(self, ctx, args):
+        """Inject sentinel when --on has no value."""
+        args = list(args)
+        for i, arg in enumerate(args):
+            if arg == "--on":
+                # Reason: --on at end of args or followed by another flag
+                # means the user wants the interactive picker.
+                if i + 1 >= len(args) or args[i + 1].startswith("-"):
+                    args.insert(i + 1, _PICK_NODE)
+                break
+        return super().parse_args(ctx, args)
+
+
+def _stdin_is_tty() -> bool:
+    """Check if stdin is an interactive terminal.
+
+    Returns:
+        bool: True if stdin is a tty.
+    """
+    return sys.stdin.isatty()
 
 app = typer.Typer(
     name="nx",
@@ -127,13 +161,14 @@ def list_sessions(ctx: typer.Context) -> None:
     console.print(table)
 
 
-@app.command("new")
+@app.command("new", cls=_OptionalOnCommand)
 def new_session(
     ctx: typer.Context,
-    name: str = typer.Argument(..., help="Session name."),
+    name: Optional[str] = typer.Argument(None, help="Session name (auto-generated if omitted)."),
     cmd: Optional[list[str]] = typer.Argument(None, help="Command to run in the session."),
-    on: Optional[str] = typer.Option(None, "--on", help="Target node."),
+    on: Optional[str] = typer.Option(None, "--on", help="Target node. Use --on without a value to pick interactively."),
     directory: Optional[str] = typer.Option(None, "--dir", "-d", help="Working directory."),
+    detach: bool = typer.Option(False, "--detach", "-D", help="Create session without attaching."),
 ) -> None:
     """Create a new tmux session on a fleet node.
 
@@ -153,8 +188,36 @@ def new_session(
     """
     config: FleetConfig = ctx.obj["config"]
 
+    # Reason: Generate a random slug when the user omits the session name.
+    if name is None:
+        name = generate_slug(2)
+
     # Determine target node.
-    node = on or config.default_node
+    # Reason: _PICK_NODE sentinel means --on was used without a value,
+    # so we always show the fzf picker regardless of tty state.
+    pick_node = on == _PICK_NODE
+
+    if on and not pick_node:
+        node = on
+    elif len(config.nodes) == 1:
+        node = config.nodes[0]
+    elif pick_node or _stdin_is_tty():
+        # Reason: Put default_node first so it's pre-highlighted in fzf.
+        sorted_nodes = sorted(
+            config.nodes, key=lambda n: (n != config.default_node, n)
+        )
+        result = subprocess.run(
+            ["fzf", "--prompt", "Select node: "],
+            input="\n".join(sorted_nodes),
+            text=True,
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            console.print("Selection cancelled.")
+            raise typer.Exit(code=1)
+        node = result.stdout.strip()
+    else:
+        node = config.default_node
 
     # Determine working directory.
     # Reason: Local sessions should inherit the caller's cwd for convenience,
@@ -183,40 +246,23 @@ def new_session(
 
     console.print(f"Created session {node}/{name}")
 
+    if not detach:
+        _attach_to_session(node, name)
 
-@app.command("attach")
-def attach_session(
-    ctx: typer.Context,
-    name: str = typer.Argument(..., help="Session name (bare or node/session)."),
-) -> None:
-    """Attach to an existing tmux session on a fleet node.
 
-    Resolves the target session (by bare name or fully qualified node/session)
-    and attaches using the appropriate strategy based on whether the caller is
-    already inside a tmux session.
+def _attach_to_session(node: str, session: str) -> None:
+    """Attach to a tmux session on the given node.
 
-    Scenario A — bare terminal: replaces the current process via execvp.
-    Scenario B — inside nexus tmux: uses switch-client (local) or opens a new
-        window with an SSH attach (remote).
-    Scenario C — inside user's personal tmux: opens a new window that nests
-        into the nexus session.
+    Selects the attach strategy based on whether the caller is inside
+    a tmux session:
+        A — bare terminal: replaces the process via execvp.
+        B — inside nexus tmux: switch-client or new-window with SSH.
+        C — inside user's personal tmux: new-window nesting into nexus.
 
     Args:
-        ctx: Typer context carrying the loaded fleet config.
-        name: Session name, either bare ("api") or fully qualified ("dev/api").
+        node: Fleet node hosting the session.
+        session: tmux session name.
     """
-    config: FleetConfig = ctx.obj["config"]
-
-    # Resolve the session name to a (node, session) tuple.
-    try:
-        node, session = asyncio.run(resolve_session(name, config))
-    except SessionNotFound as exc:
-        console.print(f"Error: {exc}")
-        raise typer.Exit(code=1)
-    except AmbiguousSession as exc:
-        console.print(f"Error: {exc}")
-        raise typer.Exit(code=1)
-
     tmux_env = os.environ.get("TMUX", "")
 
     if not tmux_env:
@@ -259,6 +305,36 @@ def attach_session(
                 ]
             )
         raise typer.Exit()
+
+
+@app.command("attach")
+def attach_session(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="Session name (bare or node/session)."),
+) -> None:
+    """Attach to an existing tmux session on a fleet node.
+
+    Resolves the target session (by bare name or fully qualified node/session)
+    and attaches using the appropriate strategy based on whether the caller is
+    already inside a tmux session.
+
+    Args:
+        ctx: Typer context carrying the loaded fleet config.
+        name: Session name, either bare ("api") or fully qualified ("dev/api").
+    """
+    config: FleetConfig = ctx.obj["config"]
+
+    # Resolve the session name to a (node, session) tuple.
+    try:
+        node, session = asyncio.run(resolve_session(name, config))
+    except SessionNotFound as exc:
+        console.print(f"Error: {exc}")
+        raise typer.Exit(code=1)
+    except AmbiguousSession as exc:
+        console.print(f"Error: {exc}")
+        raise typer.Exit(code=1)
+
+    _attach_to_session(node, session)
 
 
 @app.command("peek")
@@ -564,18 +640,47 @@ def nodes_list(ctx: typer.Context) -> None:
 @nodes_app.command("add")
 def nodes_add_cmd(
     ctx: typer.Context,
-    host: str = typer.Argument(..., help="Hostname to add to the fleet."),
+    host: Optional[str] = typer.Argument(None, help="Hostname to add to the fleet."),
 ) -> None:
     """Add a new node to the fleet.
 
-    Verifies remote tmux installation, pushes the canonical tmux.conf,
-    and configures SSH connection multiplexing.
+    When called without arguments, parses ~/.ssh/config for Host entries,
+    subtracts hosts already in the fleet, and presents an fzf picker for
+    selection. When called with a hostname, adds it directly.
 
     Args:
         ctx: Typer context carrying the loaded fleet config.
-        host: Hostname to add.
+        host: Hostname to add. If None, discovers hosts from SSH config.
     """
     config: FleetConfig = ctx.obj["config"]
+
+    if host is None:
+        candidates = discover_hosts(config)
+
+        if not candidates:
+            console.print("No new hosts found in ~/.ssh/config")
+            raise typer.Exit(code=1)
+
+        if len(candidates) == 1:
+            host = candidates[0]
+            console.print(f"Auto-selected: {host}")
+        elif sys.stdin.isatty():
+            result = subprocess.run(
+                ["fzf", "--prompt", "Select host to add: "],
+                input="\n".join(candidates),
+                text=True,
+                capture_output=True,
+            )
+            if result.returncode != 0:
+                console.print("Selection cancelled.")
+                raise typer.Exit(code=1)
+            host = result.stdout.strip()
+        else:
+            console.print("Multiple candidates found:")
+            for c in candidates:
+                console.print(f"  {c}")
+            console.print("Use: nx nodes add <host>")
+            raise typer.Exit(code=1)
 
     try:
         messages = asyncio.run(nodes_add(host, config))
@@ -603,7 +708,7 @@ def nodes_rm_cmd(
     config: FleetConfig = ctx.obj["config"]
 
     try:
-        messages = nodes_rm(host)
+        messages = nodes_rm(host, config)
     except ValueError as exc:
         console.print(f"Error: {exc}")
         raise typer.Exit(code=1)

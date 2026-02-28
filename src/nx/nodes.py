@@ -1,6 +1,7 @@
 """Node management: list, add, and remove fleet nodes."""
 
 import asyncio
+import glob as globmod
 import hashlib
 import importlib.resources
 import re
@@ -8,7 +9,7 @@ import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
-from nx.config import FleetConfig
+from nx.config import FleetConfig, save_config
 from nx.ssh import run_on_node
 
 
@@ -23,6 +24,79 @@ Host {host}
     ControlPersist 10m
     ServerAliveInterval 30
 """
+
+
+def parse_ssh_config_hosts(config_path: Path | None = None) -> list[str]:
+    """Parse ~/.ssh/config for Host entries, following Include directives.
+
+    Reads the SSH config file, expands Include directives (with ~ and glob
+    support), extracts Host entries (splitting multi-host lines), and filters
+    out wildcard patterns containing *, ?, or !.
+
+    Args:
+        config_path: Path to SSH config file. Defaults to ~/.ssh/config.
+
+    Returns:
+        list[str]: Sorted, deduplicated list of concrete hostnames.
+    """
+    config_path = config_path or Path.home() / ".ssh" / "config"
+    hosts: set[str] = set()
+    _parse_ssh_config_file(config_path, hosts)
+    return sorted(hosts)
+
+
+def _parse_ssh_config_file(path: Path, hosts: set[str]) -> None:
+    """Recursively parse a single SSH config file for Host/Include directives.
+
+    Args:
+        path: Path to the SSH config file to parse.
+        hosts: Accumulator set to add discovered hostnames into.
+    """
+    if not path.exists():
+        return
+
+    for line in path.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        # Reason: SSH config keywords are case-insensitive.
+        lower = stripped.lower()
+
+        if lower.startswith("host "):
+            # Extract everything after "Host " and split on whitespace
+            # to handle multi-host lines like "Host foo bar baz".
+            entries = stripped.split()[1:]
+            for entry in entries:
+                # Filter out wildcard patterns.
+                if any(c in entry for c in ("*", "?", "!")):
+                    continue
+                hosts.add(entry)
+
+        elif lower.startswith("include "):
+            # Expand ~ and globs in Include directives.
+            pattern = stripped.split(None, 1)[1]
+            expanded = str(Path(pattern).expanduser())
+            for match in globmod.glob(expanded):
+                _parse_ssh_config_file(Path(match), hosts)
+
+
+def discover_hosts(config: FleetConfig, ssh_config_path: Path | None = None) -> list[str]:
+    """Discover SSH hosts not yet in the fleet.
+
+    Parses ~/.ssh/config for all Host entries, then subtracts hosts already
+    present in the fleet config and the special "local" entry.
+
+    Args:
+        config: Fleet configuration with current node list.
+        ssh_config_path: Path to SSH config file. Defaults to ~/.ssh/config.
+
+    Returns:
+        list[str]: Sorted list of hostnames available to add.
+    """
+    all_hosts = parse_ssh_config_hosts(ssh_config_path)
+    existing = set(config.nodes) | {"local"}
+    return [h for h in all_hosts if h not in existing]
 
 
 @dataclass
@@ -111,16 +185,23 @@ async def nodes_ls(config: FleetConfig) -> list[NodeStatus]:
     return list(await asyncio.gather(*tasks))
 
 
-async def nodes_add(host: str, config: FleetConfig, ssh_config_path: Path | None = None) -> list[str]:
+async def nodes_add(
+    host: str,
+    config: FleetConfig,
+    ssh_config_path: Path | None = None,
+    fleet_config_path: Path | None = None,
+) -> list[str]:
     """Add a new node to the fleet.
 
     Verifies remote tmux version >= 3.0, creates SSH socket directory,
-    pushes canonical tmux.conf, and appends SSH config block.
+    pushes canonical tmux.conf, appends SSH config block, and persists
+    the host to the fleet config.
 
     Args:
         host: Hostname to add.
         config: Fleet configuration.
         ssh_config_path: Path to SSH config file. Defaults to ~/.ssh/nexus_config.
+        fleet_config_path: Path to fleet config file. Defaults to ~/.config/nexus/fleet.toml.
 
     Returns:
         list[str]: Log messages describing actions taken.
@@ -178,40 +259,54 @@ async def nodes_add(host: str, config: FleetConfig, ssh_config_path: Path | None
     else:
         log.append(f"SSH config for {host} already exists")
 
+    # Step 5: Add host to fleet config and persist.
+    if host not in config.nodes:
+        config.nodes.append(host)
+        save_config(config, fleet_config_path)
+        log.append(f"Added {host} to fleet config")
+
     return log
 
 
-def nodes_rm(host: str, ssh_config_path: Path | None = None) -> list[str]:
-    """Remove a node's SSH config block.
+def nodes_rm(
+    host: str,
+    config: FleetConfig,
+    ssh_config_path: Path | None = None,
+    fleet_config_path: Path | None = None,
+) -> list[str]:
+    """Remove a node from the fleet and its SSH config block.
 
     Args:
         host: Hostname to remove.
+        config: Fleet configuration.
         ssh_config_path: Path to SSH config file. Defaults to ~/.ssh/nexus_config.
+        fleet_config_path: Path to fleet config file. Defaults to ~/.config/nexus/fleet.toml.
 
     Returns:
         list[str]: Log messages describing actions taken.
 
     Raises:
-        ValueError: If the host is not found in the SSH config.
+        ValueError: If the host is not found in SSH config or fleet config.
     """
     config_path = ssh_config_path or NEXUS_SSH_CONFIG
     log: list[str] = []
 
-    if not config_path.exists():
-        raise ValueError(f"Host '{host}' not found in SSH config.")
+    # Remove SSH config block if present.
+    if config_path.exists():
+        content = config_path.read_text()
+        if f"Host {host}" in content:
+            pattern = rf"\nHost {re.escape(host)}\n(?:    [^\n]*\n)*"
+            new_content = re.sub(pattern, "", content)
+            config_path.write_text(new_content)
+            log.append(f"Removed SSH config for {host}")
 
-    content = config_path.read_text()
+    # Remove host from fleet config and persist.
+    if host in config.nodes:
+        config.nodes.remove(host)
+        save_config(config, fleet_config_path)
+        log.append(f"Removed {host} from fleet config")
 
-    if f"Host {host}" not in content:
-        raise ValueError(f"Host '{host}' not found in SSH config.")
-
-    # Remove the Host block (from "Host <host>" to next "Host " or EOF).
-    # Reason: Each block starts with "\nHost <name>\n" and includes indented
-    # lines until the next "\nHost " or end of file.
-    pattern = rf"\nHost {re.escape(host)}\n(?:    [^\n]*\n)*"
-    new_content = re.sub(pattern, "", content)
-
-    config_path.write_text(new_content)
-    log.append(f"Removed SSH config for {host}")
+    if not log:
+        raise ValueError(f"Host '{host}' not found in SSH config or fleet config.")
 
     return log

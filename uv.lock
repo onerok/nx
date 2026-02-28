@@ -42,6 +42,15 @@ wheels = [
 ]
 
 [[package]]
+name = "coolname"
+version = "4.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a9/57/03591c9dda2f394db126db86c9eb47d37006174d8aaa712e60e1d2376ade/coolname-4.0.0.tar.gz", hash = "sha256:168ec04acbd58c4b7db39c5988a0e9daa204631dc975367adeb762b2c880d767", size = 38143 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/96/a4501854ec7178a8c1ccafa457f44b1a28b25b816a7407ba71b816216f32/coolname-4.0.0-py3-none-any.whl", hash = "sha256:6eb1d5471b40b718d26ae7f25466e76fd54eb27f816d67051a9cc4f3f690f940", size = 39761 },
+]
+
+[[package]]
 name = "iniconfig"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -76,6 +85,7 @@ name = "nx"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "coolname" },
     { name = "pydantic" },
     { name = "rich" },
     { name = "typer" },
@@ -89,6 +99,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "coolname", specifier = ">=4.0.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "rich", specifier = ">=13.0" },
     { name = "typer", specifier = ">=0.9.0" },

@@ -39,6 +39,11 @@ format-check:
 # Lint and format
 check: lint format-check
 
+# Smoke-test: reinstall tool and verify the CLI loads
+smoke: tool-install
+    nx --version
+    nx --help > /dev/null
+
 # Run nx CLI
 run *ARGS:
     uv run nx {{ARGS}}
