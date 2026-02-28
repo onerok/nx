@@ -78,7 +78,13 @@ def list_sessions(ctx: typer.Context) -> None:
     for node in config.nodes:
         result = results[node]
         if result.returncode != 0:
-            unreachable_nodes.append(node)
+            stderr = result.stderr or ""
+            # Reason: tmux exits non-zero when the nexus socket doesn't exist
+            # (no sessions created yet). This is "zero sessions", not unreachable.
+            if "no server running" in stderr or "No such file" in stderr:
+                node_sessions[node] = []
+            else:
+                unreachable_nodes.append(node)
         else:
             sessions = parse_list_output(result.stdout)
             node_sessions[node] = sessions
