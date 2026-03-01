@@ -51,3 +51,5 @@ See PLANNING.md § Definition of Done for full checklist.
 
 - **pydantic v2 field_validator(mode="before") does not fire on field defaults.** When `FleetConfig()` is constructed with no args (missing config file), `default_cmd` stays as literal `"$SHELL"` instead of expanding. Low impact — only affects direct construction, not `load_config()` with a TOML file. Documented in `test_missing_config_uses_defaults`.
 - **Rich console.print injects ANSI escape codes into CLI output.** When using `console.print(f"Error: Session '{name}'...")`, the f-string quotes get styled with color codes (e.g. `\x1b[32m'api'\x1b[0m`). Tests must assert on fragments around the styled text rather than exact string matching. Discovered in `test_new_duplicate_name`.
+
+- [ ] allow user to configure default shell (e.g. zsh) in `FleetConfig` and use that instead of hardcoded `"$SHELL"` in tmux command builder
